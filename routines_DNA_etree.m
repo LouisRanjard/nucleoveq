@@ -832,10 +832,10 @@ plot_dtwnucleo(tree, weightf, true_seq, reference) ;
 
 
 %% test to classify reads by doing multiple etree
-dirm='~/Documents/Matlab/mfiles' ;
-cellfun(@(x) addpath(x),{dirm fullfile(dirm,'/DTWaverage') fullfile(dirm,'/dtw_nucleotide')});
 % then cluster them based on distance defined as the number of times they fall together 
 % generate (short) haplotype dataset
+dirm='~/Documents/Matlab/mfiles' ;
+cellfun(@(x) addpath(x),{dirm fullfile(dirm,'/DTWaverage') fullfile(dirm,'/dtw_nucleotide')});
 hlen=500; nhaplo=10;
 reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
 [ true_seq, reference.seqvect ] = sim_haplotypes(nhaplo,hlen,0.3) ;
