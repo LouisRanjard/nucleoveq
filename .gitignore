@@ -34,3 +34,6 @@
 
 # Matlab mex files
 *.mexa64
+
+# backup files
+*~

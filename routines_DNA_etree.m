@@ -879,6 +879,8 @@ parfor (g=1:1000, 30)
     read_ald = read_ald + abs(bsxfun(@minus,readpos',readpos)) ;
     % record reads co-classification (how many times each pair of reads are classified together)
     read_cocount = read_cocount + bsxfun(@eq,BMU(:,1)',BMU(:,1)) ;
+    % trim the weights by removing high entropy regions
+    weight_trim = cellfun(@(x) entrop_trim(x), weight) ;
 end
 save('/home/louis/vecqua/data1000_r20_30x.mat',read_cocount,read_ald) ;
 read_dist = 1 - read_cocount./max(read_cocount(:)) ;
