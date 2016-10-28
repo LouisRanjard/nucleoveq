@@ -37,3 +37,6 @@
 
 # backup files
 *~
+
+# log files
+*.log

@@ -69,8 +69,11 @@ DEBUG=0;
 rng('shuffle'); % creates a different seed each time
 filename = ['dtwaven_' num2str(epoch) '_' num2str(randi(1e6)) '.out'] ;
 fileid = fopen(filename,'w') ;
-filelog=fopen([filename '.log'],'w') ;
-filelog2=fopen([filename '_2.log'],'w') ;
+OUTFILE=0;
+if OUTFILE
+    filelog=fopen([filename '.log'],'w') ;
+    filelog2=fopen([filename '_2.log'],'w') ;
+end
 
 % to make computation faster, record the dico index of each syllable
 if numel(dico)>0
@@ -362,9 +365,11 @@ for e=1:epoch % each epoch
         %if ( nbmu(BMU(s,1)) >= ( nbmu(tree(BMU(s,1))) / 2 )  && ...                                                          % hit counter greater than parent's /2
         %        entrop{BMU(s,1)}(end) > entrop{tree(BMU(s,1))}(end) )
         % AND wEntropy greater than parent's (never true)
-        fprintf(filelog,'%d\t%d\t%d\t%d\n',nbmu(BMU(s,1)),shannonEntropy(weight{BMU(s,1)}),sum(weightcov==0),varcov) ;
-        fprintf(filelog2,'%d\t%d\t%d\t%d\n',nbmu(BMU(s,1))>=(nbmu(tree(BMU(s,1)))/nbmu_factor), shannonEntropy(weight{BMU(s,1)})>(entropy_factor*cutoff_e),...
+        if OUTFILE
+            fprintf(filelog,'%d\t%d\t%d\t%d\n',nbmu(BMU(s,1)),shannonEntropy(weight{BMU(s,1)}),sum(weightcov==0),varcov) ;
+            fprintf(filelog2,'%d\t%d\t%d\t%d\n',nbmu(BMU(s,1))>=(nbmu(tree(BMU(s,1)))/nbmu_factor), shannonEntropy(weight{BMU(s,1)})>(entropy_factor*cutoff_e),...
                                         sum(weightcov==0)<(weightcov_factor*wlength), varcov<(varcov_factor*reference.varcov)) ;
+        end
         if ( nbmu(BMU(s,1))>=(nbmu(tree(BMU(s,1)))/nbmu_factor) &&...
                 shannonEntropy(weight{BMU(s,1)})>(entropy_factor*cutoff_e) &&...
                 sum(weightcov==0)<(weightcov_factor*wlength) &&...
@@ -600,7 +605,9 @@ if verbose==1 && usejava('desktop') % plot the tree with nBMU
 end
 fprintf(fileid,'\n#------------------------------------------------\n');
 fclose(fileid);
-fclose(filelog);
-fclose(filelog2);
+if OUTFILE
+    fclose(filelog);
+    fclose(filelog2);
+end
 
 end
