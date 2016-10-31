@@ -1,5 +1,6 @@
 function [] = plot_dtwnucleo(tree, weight, true_seq, reference, viewalign, fileout)
 % Visualization function to generate nucleotide sequences and plot phylogenetic tree
+% tree is a evolving tree structure output by ETDTWrec function
 
     if nargin<6
         fileout=0 ;
@@ -13,7 +14,13 @@ function [] = plot_dtwnucleo(tree, weight, true_seq, reference, viewalign, fileo
     ref.Sequence = reference.Sequence ;
     ref.seqvect = reference.seqvect ;
     
-    tips = setdiff(1:length(tree),tree);
+    % if a tree is input then only consider the tips
+    if (numel(tree)>1)
+        tips = setdiff(1:length(tree),tree);
+    else % otherwise consider all weight matrices
+        tips = 1:numel(weight) ;
+    end
+    
     weight_seq=[];
     s=1;
     for n=tips
