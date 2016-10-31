@@ -9,10 +9,11 @@ function [ haplo, reference ] = sim_haplotypes(nhaplo,len,dist2ref)
 
     reference = randmatseq(len) ;
     haplo = struct() ;
-    for n=1:nhaplo
+    for n=1:nhaplo % the order of the structure fields is important and must be consistent with other datasets (.Header,.Sequence,.seqvect,...)
         haplo(n).Header = ['haplotype' num2str(n)] ;
-        haplo(n).seqvect = mutatematseq(reference, dist2ref) ;
-        haplo(n).Sequence = mat2nucleo(haplo(n).seqvect) ;
+        vector_seq = mutatematseq(reference, dist2ref) ;
+        haplo(n).Sequence = mat2nucleo(vector_seq) ;
+        haplo(n).seqvect = vector_seq ;
     end
     
 end
