@@ -12,7 +12,7 @@ function [] = plot_dtwnucleo(tree, weight, true_seq, reference, viewalign, fileo
     % in case reference has extra fields
     ref.Header = reference.Header ;
     ref.Sequence = reference.Sequence ;
-    ref.seqvect = reference.seqvect ;
+    ref.seqvect = reference.seqvect(1:4,:) ; % get rid of persistence vector
     
     % if a tree is input then only consider the tips
     if (numel(tree)>1)
@@ -26,19 +26,23 @@ function [] = plot_dtwnucleo(tree, weight, true_seq, reference, viewalign, fileo
     for n=tips
         weight_seq(s).Header = ['weight' num2str(n)] ;
         weight_seq(s).Sequence = mat2nucleo(weight{n}) ;
-        weight_seq(s).seqvect = weight{n} ;
+        weight_seq(s).seqvect = weight{n}(1:4,:) ; % get rid of persistence vector
         s=s+1;
     end
     
+    % make sure the data structure dimension are consistent
+    if size(weight_seq,2)>size(weight_seq,1), weight_seq=weight_seq'; end
+    if size(true_seq,2)>size(true_seq,1), true_seq=true_seq'; end
+    
     if (viewalign>0) % multiple seq alignment
-        seqalignviewer(multialign([true_seq ; ref ; weight_seq'])) ;
+        seqalignviewer(multialign([true_seq ; ref ; weight_seq])) ;
     end
     
-    phytree = seqlinkage(seqpdist([true_seq ; ref ; weight_seq']),'average',[true_seq ; ref ; weight_seq']); 
+    phytree = seqlinkage(seqpdist([true_seq ; ref ; weight_seq],'Indels','pairwise-delete'),'average',[true_seq ; ref ; weight_seq]); 
     phytreeviewer(phytree);
     
     if fileout~=0
-        fastawrite(fileout,[true_seq ; ref ; weight_seq']);
+        fastawrite(fileout,[true_seq ; ref ; weight_seq]);
     end
     
 end

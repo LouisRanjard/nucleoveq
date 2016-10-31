@@ -882,6 +882,8 @@ parfor (g=1:1000, 30)
     read_cocount = read_cocount + bsxfun(@eq,BMU(:,1)',BMU(:,1)) ;
     % trim the weights by removing high entropy regions
     weight_trim = cellfun(@(x) entrop_trim(x,reference.entropy+2*refent_sd,1), weight, 'UniformOutput', false ) ;
+    % align trimmed weights to the true haplotypes
+    plot_dtwnucleo(0, weight_trim, true_seq, reference) ;
 end
 save('/home/louis/vecqua/data1000_r20_30x.mat',read_cocount,read_ald) ;
 read_dist = 1 - read_cocount./max(read_cocount(:)) ;

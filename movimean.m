@@ -1,5 +1,6 @@
 function [ y ] = movimean(x,windowSize)
 % perform moving mean of input signal x around window size
+%
 
 if nargin<2
     windowSize = 3 ;
