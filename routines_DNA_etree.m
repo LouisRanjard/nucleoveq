@@ -872,7 +872,8 @@ parfor (g=1:1000, 30)
     reference.Sequence = mat2nucleo(reference.seqvect) ;
     [ ~, varcov ] = wcoverage(reference.seqvect(1:4,:),size(reads(1).seqvect,2),rpositionr,false) ;
     reference.varcov = varcov ;
-    reference.entropy = shannonEntropy(reference.seqvect) ;
+    [reference.entropy, entval] = shannonEntropy(reference.seqvect) ;
+    refent_sd = std(entval) ; % standard deviation of the reference entropy vector
     [tree, weight, BMU, ~, ~, ~] = ETDTWrec(reads,3,[1-w 1-w],0.9,[2 2],numel(reads),0.95,'seqvect',[],0,0,1,reference) ;
     [~,~,readpos] = fortify(1, reads, weight, w, BMU, 0, 1) ;
     % record alignment distance between reads
@@ -880,7 +881,7 @@ parfor (g=1:1000, 30)
     % record reads co-classification (how many times each pair of reads are classified together)
     read_cocount = read_cocount + bsxfun(@eq,BMU(:,1)',BMU(:,1)) ;
     % trim the weights by removing high entropy regions
-    weight_trim = cellfun(@(x) entrop_trim(x), weight) ;
+    weight_trim = cellfun(@(x) entrop_trim(x,reference.entropy+2*refent_sd,1), weight, 'UniformOutput', false ) ;
 end
 save('/home/louis/vecqua/data1000_r20_30x.mat',read_cocount,read_ald) ;
 read_dist = 1 - read_cocount./max(read_cocount(:)) ;
