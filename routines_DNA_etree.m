@@ -838,7 +838,7 @@ dirm='~/Documents/Matlab/mfiles' ;
 cellfun(@(x) addpath(x),{dirm fullfile(dirm,'/DTWaverage') fullfile(dirm,'/dtw_nucleotide')});
 hlen=500; nhaplo=10;
 reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
-[ true_seq, reference.seqvect ] = sim_haplotypes(nhaplo,hlen,0.3) ;
+[ true_seq, reference.seqvect ] = sim_haplotypes(nhaplo,hlen,0.1) ;
 % number of variable sites
 if (numvarsites(true_seq)<(hlen*0.1)), error('Too few variable sites') ; end
 % show phylo tree
@@ -846,7 +846,7 @@ if (numvarsites(true_seq)<(hlen*0.1)), error('Too few variable sites') ; end
 % calculate joint entropy based on true haplotypes
 %joint_shannonEnt = shannonEntropy_s({true_seq.seqvect}) ;
 % generate error free reads
-reads = sim_reads(true_seq,20,5) ;
+reads = sim_reads(true_seq,20,20) ;
 ref_backup=reference;
 read_cocount = zeros(numel(reads)) ; % number of co-clustering
 read_ald = zeros(numel(reads)) ; % distance between aligned position
@@ -874,7 +874,7 @@ parfor (g=1:1000, 30)
     reference.varcov = varcov ;
     [reference.entropy, entval] = shannonEntropy(reference.seqvect) ;
     refent_sd = std(entval) ; % standard deviation of the reference entropy vector
-    [tree, weight, BMU, ~, ~, ~] = ETDTWrec(reads,3,[1-w 1-w],0.9,[2 2],numel(reads),0.95,'seqvect',[],0,0,1,reference) ;
+    [tree, weight, BMU, ~, ~, ~] = ETDTWrec(reads,10,[1-w 1-w],0.9,[2 2],numel(reads),0.95,'seqvect',[],0,0,1,reference) ;
     [~,~,readpos] = fortify(1, reads, weight, w, BMU, 0, 1) ;
     % record alignment distance between reads
     read_ald = read_ald + abs(bsxfun(@minus,readpos',readpos)) ;
