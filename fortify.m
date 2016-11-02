@@ -1,4 +1,4 @@
-function [ weight, BMU, readposition ] = fortify(ite, limit, reads, weight, w, BMU, ce, fe)
+function [ weight, BMU, readposition ] = fortify(ite, limit, reads, weight, w, BMU, ce, fe, verbose)
 % realign each read to its BMU "ite" iteration(s)
 % stop if ....
 
@@ -11,21 +11,25 @@ function [ weight, BMU, readposition ] = fortify(ite, limit, reads, weight, w, B
     end
 
     % verbose mode, plot entropy values
-    verbose=1;
-    
-    if nargin<8
-        fe=0 ;
-        if nargin<7
-            ce=0 ;
+    if nargin<9
+        verbose=0 ;
+        if nargin<8
+            fe=0 ;
+            if nargin<7
+                ce=0 ;
+            end
         end
     end
     
     % record alignment position of the reads
     rposition = zeros(numel(reads),ite) ;
     
+    % counter, if the entropy does not change for three iterations, then exit
+    cnt3 = 0 ;
+    
     % align the reads to their respective BMU
+    x=zeros(1,ite);
     if verbose
-        x=zeros(1,ite);
         fprintf(1,'Consensus entropy (iteration=%d, limit=%f)\n',ite,limit);
     end
     for n=1:ite
@@ -34,12 +38,27 @@ function [ weight, BMU, readposition ] = fortify(ite, limit, reads, weight, w, B
             [ BMU(s,2), weight{BMU(s,1)}, aligned_pos ] = DTWaverage( weight{BMU(s,1)}, reads(s).seqvect, 1, w, ce, fe ) ;
             rposition(s,n) = aligned_pos ;
         end
-        ses = shannonEntropy_s(weight) ;
+        % parallelising the previosu loop by grouping reads by BMU
+%         for b = unique(BMU(:,1))
+%            for y = (BMU(s,1)==b)
+%               [ BMU(y,2), weight{BMU(y,1)}, aligned_pos ] = DTWaverage( weight{BMU(y,1)}, reads(y).seqvect, 1, w, ce, fe ) ;
+%               rposition(y,n) = aligned_pos ;
+%            end
+%         end
+        ses = shannonEntropy_s(weight(unique(BMU(:,1)))) ; % only consider tips (weight that are BMU to some read)
+        if (n>1 && ses==x(n-1))
+            cnt3 = cnt3+1 ;
+        else
+            cnt3 = 0 ;
+        end
         if verbose
             fprintf(1,'%d - %f\n',n,ses) ;
-            x(n)=ses;
         end
+        x(n)=ses;
         if ses>limit
+            break;
+        end
+        if cnt3>2
             break;
         end
     end

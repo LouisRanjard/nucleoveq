@@ -919,7 +919,7 @@ reads=fastqread(filefq);
 for m=1:numel(reads), reads(m).seqvect=nucleo2mat(reads(m).Sequence) ; end
 plot_dtwnucleo(0, [], true_seq) ;
 reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
-reference.seqvect = mutatematseq(true_seq(1).seqvect,0.3) ;
+reference.seqvect = mutatematseq(true_seq(1).seqvect,0.02) ;
 % OR RANDOM reference.seqvect = randmatseq(length(true_seq(1).Sequence)) ;
 reference.Sequence = mat2nucleo(reference.seqvect) ;
 ref_backup=reference;
@@ -942,4 +942,5 @@ reference.Sequence = mat2nucleo(reference.seqvect) ;
 [ ~, varcov ] = wcoverage(reference.seqvect(1:4,:),size(reads(1).seqvect,2),rpositionr,false) ;
 reference.varcov = varcov;
 reference.entropy = shannonEntropy(reference.seqvect) ;
-[tree, weight, ~, ~, ~, ~] = ETDTWrec(reads,10,[1-w 1-w],0.9,[2 2],numel(reads),0.95,'seqvect',[],0,0,1,reference) ;
+[tree, weight, BMU, ~, ~, ~] = ETDTWrec(reads,10,[1-w 1-w],0.9,[2 2],numel(reads),0.95,'seqvect',[],0,0,1,reference) ;
+plot_dtwnucleo(tree, weight, true_seq, reference, 1) ;

@@ -551,14 +551,15 @@ for e=1:epoch % each epoch
     % Shannon Entropy, control and stop if all nodes have low entropy
     converge = 0; %%% DEBUG %%% prevent convergence here, should be "converge = 1;"
     se(e)=0;
+    sew = zeros(1,numel(weight)) ;
     for w=tips % all tips
         defined = round(0.95*size(weight{BMU(s,1)},2)) ; % what is shannon entropy if 95% of the sites would be fully defined
         undefined = size(weight{BMU(s,1)},2)-defined ;
         seqvectnull = [ repmat([1; 0; 0; 0],1,defined) repmat([.25; .25; .25; .25],1,undefined) ] ;
         senull = shannonEntropy(seqvectnull) ;
-        sew = shannonEntropy(weight{w}) ;
-        se(e) = se(e)+sew ;
-        if sew>senull
+        sew(w) = shannonEntropy(weight{w}) ;
+        se(e) = se(e)+sew(w) ;
+        if sew(w)>senull
             converge = 0;
         end
     end
@@ -568,6 +569,14 @@ for e=1:epoch % each epoch
     %fprintf(1,'AIC=%g, ', 2*numtips-2*log(1/p(e)) );
     %% Prune tree for zero hits tips
     %[tree,weight,nbmue] = pruneTip(tree,weight,nbmue,find(nbmue>0)) ; %%% DEBUG %%%
+    %% Fortify the tree by realigning the reads to their BMU
+    % choose pulling weight so that, if for a given position all the N reads r are different
+    % from reference R, then the position in reference is converted to the read
+    % position value after going through all the reads exactly. It cannot reach one so we use 0.9999
+    % pw = (1-0.9999)^(1/N)
+    pw = 0.0001^(1/numel(syllab)) ;
+    [weight, BMU] = fortify(0, reference.entropy, syllab, weight, pw, BMU, 0, 1) ;
+    
     %% Save some features of the Etree
     features.TreeSize(e) = numel(tree) ;
     features.NumTips(e) = numtips ;
@@ -582,10 +591,25 @@ for e=1:epoch % each epoch
     else
         fprintf(fileid,'%.2f\t %.4f\t %.4f\t %.4f\t %g\t %g', NeSt, p(e), se(e), features.AllEntropy(e), numel(tree), numtips ) ;        
     end
-    % stop if all nodes have low entropy (mean entropy)
+    
+    %% check some criteria to stop learning
+    % Stop if all nodes have low entropy (mean entropy)
     if converge==1, fprintf(fileid,'\n#*** All weights are at minimum entropy95 ***\n'); break; end
     % Check overall entropy versus the initial entropy of the root
     if (features.AllEntropy(e)>reference.entropy), fprintf(fileid,'\n#*** Joint tips entropy is greater than root entropy ***\n'); break; end
+    % Check if overall entropy is decreasing (=overfitting)
+    if (e>2 && features.AllEntropy(e)<features.AllEntropy(e-2)),  fprintf(fileid,'\n#*** Joint tips entropy is decreasing ***\n'); break; end
+    % Stopping criteria NOT met -> Force the dividing of the highest entropy node
+    [~,hottip] = max(sew) ;
+    for w=1:numchildren
+        tree = [tree hottip] ;
+        if (fe)
+            weight{numel(tree)} = weight{hottip} ; % simply copy parent node
+            weightvarcov{numel(tree)} = 0 ;
+        end
+        nbmu = [nbmu 0] ;
+        nbmue = [nbmue 0] ;
+    end
     % DISPLAY?
     if verbose==1, axes(mapprec); plot(p); drawnow; end
     %%%%%%%%%%%%%%%% SAVING THE TEMPORARY TREE %%%%%%%%%%%%%%%%
