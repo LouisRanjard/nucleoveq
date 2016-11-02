@@ -49,6 +49,7 @@ function [ weight, BMU, readposition ] = fortify(ite, limit, reads, weight, w, B
     readposition = cellfun(@mode,C);
     
     if verbose
+        figure;
         plot(x(1:n));
         line([1 n],[limit limit],'Color','red');
     end

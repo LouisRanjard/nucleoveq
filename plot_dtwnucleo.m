@@ -6,13 +6,23 @@ function [] = plot_dtwnucleo(tree, weight, true_seq, reference, viewalign, fileo
         fileout=0 ;
         if nargin<5
             viewalign=0 ;
+            if nargin<4
+                reference=[];
+                if nargin<3
+                    true_seq=[];
+                end
+            end
         end
     end
 
     % in case reference has extra fields
-    ref.Header = reference.Header ;
-    ref.Sequence = reference.Sequence ;
-    ref.seqvect = reference.seqvect(1:4,:) ; % get rid of persistence vector
+    if isstruct(reference)
+        ref.Header = reference.Header ;
+        ref.Sequence = reference.Sequence ;
+        ref.seqvect = reference.seqvect(1:4,:) ; % get rid of persistence vector
+    else
+        ref=[];
+    end
     
     % if a tree is input then only consider the tips
     if (numel(tree)>1)
@@ -21,13 +31,17 @@ function [] = plot_dtwnucleo(tree, weight, true_seq, reference, viewalign, fileo
         tips = 1:numel(weight) ;
     end
     
-    weight_seq=[];
-    s=1;
-    for n=tips
-        weight_seq(s).Header = ['weight' num2str(n)] ;
-        weight_seq(s).Sequence = mat2nucleo(weight{n}) ;
-        weight_seq(s).seqvect = weight{n}(1:4,:) ; % get rid of persistence vector
-        s=s+1;
+    if iscell(weight)
+        weight_seq=[];
+        s=1;
+        for n=tips
+            weight_seq(s).Header = ['weight' num2str(n)] ;
+            weight_seq(s).Sequence = mat2nucleo(weight{n}) ;
+            weight_seq(s).seqvect = weight{n}(1:4,:) ; % get rid of persistence vector
+            s=s+1;
+        end
+    else
+        weight_seq=[];
     end
     
     % make sure the data structure dimension are consistent

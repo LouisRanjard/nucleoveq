@@ -838,7 +838,7 @@ dirm='~/Documents/Matlab/mfiles' ;
 cellfun(@(x) addpath(x),{dirm fullfile(dirm,'/DTWaverage') fullfile(dirm,'/dtw_nucleotide')});
 hlen=500; nhaplo=10;
 reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
-[ true_seq, reference.seqvect ] = sim_haplotypes(nhaplo,hlen,0.1) ;
+[ true_seq, reference.seqvect ] = sim_haplotypes(nhaplo,hlen,0.03) ;
 % number of variable sites
 if (numvarsites(true_seq)<(hlen*0.1)), error('Too few variable sites') ; end
 % show phylo tree
@@ -853,7 +853,7 @@ read_ald = zeros(numel(reads)) ; % distance between aligned position
 % Generate multiple sets of candidate haplotypes
 weight_seq = [] ;
 s=1;
-parfor (g=1:1000, 30)
+parfor (g=1:10, 6)
 % for g=1:10 %not parallel
     reference=ref_backup;
     % root weight initialisation: align all reads once to the reference to create initial weight
@@ -875,7 +875,7 @@ parfor (g=1:1000, 30)
     [reference.entropy, entval] = shannonEntropy(reference.seqvect) ;
     refent_sd = std(entval) ; % standard deviation of the reference entropy vector
     [tree, weight, BMU, ~, ~, ~] = ETDTWrec(reads,10,[1-w 1-w],0.9,[2 2],numel(reads),0.95,'seqvect',[],0,0,1,reference) ;
-    [~,~,readpos] = fortify(1, reads, weight, w, BMU, 0, 1) ;
+    [~,~,readpos] = fortify(0,reference.entropy, reads, weight, w, BMU, 0, 1) ;
     % record alignment distance between reads
     read_ald = read_ald + abs(bsxfun(@minus,readpos',readpos)) ;
     % record reads co-classification (how many times each pair of reads are classified together)
@@ -885,6 +885,9 @@ parfor (g=1:1000, 30)
     % align trimmed weights to the true haplotypes
     plot_dtwnucleo(0, weight_trim, true_seq, reference) ;
 end
+% results for fortify() tests, on 10 replicates of the same data but different order of reads for reference initialisation
+% reference.entropy: 0.038662 0.038665 0.038562 0.038659 0.038764 0.038749 0.038689 0.038654 0.038723 0.038759 
+% number of iteration to reach reference entropy: 15 18 16 18 15 16 17 16 17 15
 save('/home/louis/vecqua/data1000_r20_30x.mat',read_cocount,read_ald) ;
 read_dist = 1 - read_cocount./max(read_cocount(:)) ;
 %read_dist2 = exp(-(read_cocount./max(read_cocount(:))).^2) ; for i=1:10000, read_dist2(i,i)=0; end;
@@ -900,6 +903,43 @@ gscatter(Y(:,1),Y(:,2),c,[],'o') ;% MDS plot colored by haplotypes
 % using dp ()
 centroids = densipeak(read_dist) ;
 % reconstruct haplotype sequences
-
+%...
 % plot phylogenetic tree with true haplotypes
+%...
 
+
+%% Test multiple etree with short haplotypes geenrated by fastsimcoal
+cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq' ;
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+truefasta='/home/louis/Documents/Projects/ShortReads/test_nucleoveq/out.haplo.fasta';
+filefq='/home/louis/Documents/Projects/ShortReads/test_nucleoveq/out.combined.fq';
+true_seq = fastaread(truefasta);
+for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+reads=fastqread(filefq);
+for m=1:numel(reads), reads(m).seqvect=nucleo2mat(reads(m).Sequence) ; end
+plot_dtwnucleo(0, [], true_seq) ;
+reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
+reference.seqvect = mutatematseq(true_seq(1).seqvect,0.3) ;
+% OR RANDOM reference.seqvect = randmatseq(length(true_seq(1).Sequence)) ;
+reference.Sequence = mat2nucleo(reference.seqvect) ;
+ref_backup=reference;
+weight_seq = [] ;
+s=1;
+g=1;
+reference=ref_backup;
+% root weight initialisation: align all reads once to the reference to create initial weight
+w = 0.0001^(1/numel(reads)) ;
+rindex = randperm(numel(reads)) ;
+reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+BMUr = zeros(numel(reads),2) ;
+rpositionr = zeros(numel(reads),1) ;
+for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+    [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w, 0, 1 ) ;
+    rpositionr(r) = aligned_pos ;
+    BMUr(r,:) = [1 dist] ;
+end
+reference.Sequence = mat2nucleo(reference.seqvect) ;
+[ ~, varcov ] = wcoverage(reference.seqvect(1:4,:),size(reads(1).seqvect,2),rpositionr,false) ;
+reference.varcov = varcov;
+reference.entropy = shannonEntropy(reference.seqvect) ;
+[tree, weight, ~, ~, ~, ~] = ETDTWrec(reads,10,[1-w 1-w],0.9,[2 2],numel(reads),0.95,'seqvect',[],0,0,1,reference) ;
