@@ -1,6 +1,7 @@
 function [ weight, BMU, readposition ] = fortify(ite, limit, reads, weight, w, BMU, ce, fe, verbose)
 % realign each read to its BMU "ite" iteration(s)
-% stop if ....
+% stop if entropy go above the limit
+% 2 verbose mode: 1:print the number of iteration, 2:plot the entropy value throughout the process
 
     if ite==0 % default maximum number of iterations
         ite=1000 ;
@@ -29,7 +30,7 @@ function [ weight, BMU, readposition ] = fortify(ite, limit, reads, weight, w, B
     
     % align the reads to their respective BMU
     x=zeros(1,ite);
-    if verbose
+    if verbose>1
         fprintf(1,'Consensus entropy (iteration=%d, limit=%f)\n',ite,limit);
     end
     for n=1:ite
@@ -38,7 +39,7 @@ function [ weight, BMU, readposition ] = fortify(ite, limit, reads, weight, w, B
             [ BMU(s,2), weight{BMU(s,1)}, aligned_pos ] = DTWaverage( weight{BMU(s,1)}, reads(s).seqvect, 1, w, ce, fe ) ;
             rposition(s,n) = aligned_pos ;
         end
-        % parallelising the previosu loop by grouping reads by BMU
+        % parallelising the previous loop by grouping reads by BMU
 %         for b = unique(BMU(:,1))
 %            for y = (BMU(s,1)==b)
 %               [ BMU(y,2), weight{BMU(y,1)}, aligned_pos ] = DTWaverage( weight{BMU(y,1)}, reads(y).seqvect, 1, w, ce, fe ) ;
@@ -51,7 +52,7 @@ function [ weight, BMU, readposition ] = fortify(ite, limit, reads, weight, w, B
         else
             cnt3 = 0 ;
         end
-        if verbose
+        if verbose>1
             fprintf(1,'%d - %f\n',n,ses) ;
         end
         x(n)=ses;
@@ -67,7 +68,11 @@ function [ weight, BMU, readposition ] = fortify(ite, limit, reads, weight, w, B
     C = num2cell(rposition,2) ;
     readposition = cellfun(@mode,C);
     
-    if verbose
+    % screen output
+    if verbose>0
+        fprintf(1,'Fortify limit %.4f\n 0 %.4f\n%d %.4f\n',limit,x(1),n,x(n)) ;
+    end
+    if verbose>1
         figure;
         plot(x(1:n));
         line([1 n],[limit limit],'Color','red');

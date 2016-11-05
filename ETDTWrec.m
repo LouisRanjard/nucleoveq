@@ -575,7 +575,7 @@ for e=1:epoch % each epoch
     % position value after going through all the reads exactly. It cannot reach one so we use 0.9999
     % pw = (1-0.9999)^(1/N)
     pw = 0.0001^(1/numel(syllab)) ;
-    [weight, BMU] = fortify(0, reference.entropy, syllab, weight, pw, BMU, 0, 1) ;
+    [weight, BMU] = fortify(10, reference.entropy, syllab, weight, pw, BMU, 0, 1, 1) ; % 10 iterations max unless entropy is reached
     
     %% Save some features of the Etree
     features.TreeSize(e) = numel(tree) ;
