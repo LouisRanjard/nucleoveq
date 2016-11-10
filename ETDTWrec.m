@@ -575,7 +575,8 @@ for e=1:epoch % each epoch
     % position value after going through all the reads exactly. It cannot reach one so we use 0.9999
     % pw = (1-0.9999)^(1/N)
     pw = 0.0001^(1/numel(syllab)) ;
-    [weight, BMU] = fortify(10, reference.entropy, syllab, weight, pw, BMU, 0, 1, 1) ; % 10 iterations max unless entropy is reached
+    %[weight, BMU] = fortify(10, reference.entropy, syllab, weight, pw, BMU, 0, 1, 1) ; % 10 iterations max unless entropy is reached
+    [weight, BMU] = fortify(10, 0, syllab, weight, pw, BMU, 0, 1, 1) ; % 10 iterations max unless entropy is reached
     
     %% Save some features of the Etree
     features.TreeSize(e) = numel(tree) ;
@@ -596,9 +597,9 @@ for e=1:epoch % each epoch
     % Stop if all nodes have low entropy (mean entropy)
     if converge==1, fprintf(fileid,'\n#*** All weights are at minimum entropy95 ***\n'); break; end
     % Check overall entropy versus the initial entropy of the root
-    if (features.AllEntropy(e)>reference.entropy), fprintf(fileid,'\n#*** Joint tips entropy is greater than root entropy ***\n'); break; end
+    if (e>2 && features.AllEntropy(e)>reference.entropy), fprintf(fileid,'\n#*** Joint tips entropy is greater than root entropy ***\n'); break; end
     % Check if overall entropy is decreasing (=overfitting)
-    if (e>2 && features.AllEntropy(e)<features.AllEntropy(e-2)),  fprintf(fileid,'\n#*** Joint tips entropy is decreasing ***\n'); break; end
+    %if (e>2 && features.AllEntropy(e)<features.AllEntropy(e-2)),  fprintf(fileid,'\n#*** Joint tips entropy is decreasing ***\n'); break; end
     % Stopping criteria NOT met -> Force the dividing of the highest entropy node
     [~,hottip] = max(sew) ;
     for w=1:numchildren
