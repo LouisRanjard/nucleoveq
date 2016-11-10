@@ -1,6 +1,11 @@
 function [ weight, BMU, readposition ] = fortify(ite, limit, reads, weight, w, BMU, ce, fe, verbose)
+%
 % realign each read to its BMU "ite" iteration(s)
-% stop if entropy go above the limit
+%
+% stop if joint entropy (calculated without normalising) :
+% (i) goes above the input limit
+% (ii) stays constant for 3 iterations (within 1/1000 precision)
+%
 % 2 verbose mode: 1:print the number of iteration, 2:plot the entropy value throughout the process
 
     if ite==0 % default maximum number of iterations
@@ -27,6 +32,7 @@ function [ weight, BMU, readposition ] = fortify(ite, limit, reads, weight, w, B
     
     % counter, if the entropy does not change for three iterations, then exit
     cnt3 = 0 ;
+    prec = 1e-3 ;
     
     % align the reads to their respective BMU
     x=zeros(1,ite);
@@ -46,8 +52,8 @@ function [ weight, BMU, readposition ] = fortify(ite, limit, reads, weight, w, B
 %               rposition(y,n) = aligned_pos ;
 %            end
 %         end
-        ses = shannonEntropy_s(weight(unique(BMU(:,1)))) ; % only consider tips (weight that are BMU to some read)
-        if (n>1 && ses==x(n-1))
+        ses = shannonEntropy_s(weight(unique(BMU(:,1))),0) ; % only consider tips (weight that are BMU to some read)
+        if (n>1 && ses>=x(n-1)*(1-prec) && ses<=x(n-1)*(1+prec))
             cnt3 = cnt3+1 ;
         else
             cnt3 = 0 ;
