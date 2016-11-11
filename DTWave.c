@@ -339,7 +339,7 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
     int l=0;
     int maxt=0; /* length of the matrix */
     int ta,tb,temp;
-    double *mat4,*mata;
+    double *mat4,*mata,vsum;
     int *t;
     int n_del=0, n_ins=0; /* count number of insertions and deletions into mat1 */
     int it; /*DEBUG*/
@@ -372,8 +372,16 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
                i--;
                break;
            case 2:
+               /*vsum=0; store the sum to normalise proba so that they sum to 1*/
                for (n=0;n<numv2;n++) { 
-                    *(mat4+n+(numv1*l)) = weight*(*(mat1+n+(numv1*(j-1)))) + (1-weight)*(*(mat2+n+(numv2*(i-1)))); }
+                    *(mat4+n+(numv1*l)) = weight*(*(mat1+n+(numv1*(j-1)))) + (1-weight)*(*(mat2+n+(numv2*(i-1)))); 
+                    /* *(mat4+n+(numv1*l)) = roundf(*(mat4+n+(numv1*l)) * 10000) / 10000 ; */
+                    /*vsum+=*(mat4+n+(numv1*l));*/
+               }
+               /*if ( (round(vsum*10000)/10000)!=1 ) printf("%.16f\n",vsum);*/
+               /*for (n=0;n<numv2;n++) {  add a normlisation step to ensure that the sum of the frequency vector sum to 1
+                    *(mat4+n+(numv1*l)) = *(mat4+n+(numv1*l))/vsum; } */
+               /* persistence vector */
                *(mat4+n+(numv1*l)) = *(mat1+n+(numv1*(j-1)));
                i--;
                j--;
@@ -489,7 +497,7 @@ void euclidist(double *d, double *mat1, double *mat2, double *indelc, int numrow
                    *(d+((numrows)*i)+j) = *(d+((numrows)*i)+j) + ((*(mat2+n+(numv2*(i))))-(*(mat1+n+(numv1*(j))))) * ((*(mat2+n+(numv2*(i))))-(*(mat1+n+(numv1*(j))))) ;
                }
                *(d+((numrows)*i)+j) = sqrt( *(d+((numrows)*i)+j) ) ;
-               /* printf("%f ",*(d+((numrows)*i)+j)); */
+               /* printf("%f\n",*(d+((numrows)*i)+j)); */
            }else{
                for ( n=0 ; n<numv2 ; n++ ) {/* if (i==0) printf("%f\n",(*(mat1+n+((numv+1)*(j))))); */
                    *(d+((numrows)*i)+j) = *(d+((numrows)*i)+j) + *(cow+n) * ((*(mat2+n+(numv2*(i))))-(*(mat1+n+(numv1*(j))))) * ((*(mat2+n+(numv2*(i))))-(*(mat1+n+(numv1*(j))))) ; }

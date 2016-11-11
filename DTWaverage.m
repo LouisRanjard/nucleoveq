@@ -61,9 +61,19 @@ if (nargin<6)
     end
 end
 
+if (fe && size(mat1,1)~=5 && size(mat1,1)~=4)
+    error('DTWaverage(): Matrix dimension issue');
+end
+
 %%%%%%%%%%%%%% CALL THE C FUNCTION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%% need to be compiled first: mex COPTIMFLAGS=-O3 [path]/DTWave.c
+%%% need to be compiled first: mex GCC=/usr/bin/gcc-4.7 COPTIMFLAGS=-O3 [path]/DTWave.c
 [dist, mat4, refpos] = DTWave(mat1,mat2,cow,q,ce,fe);
 
 % return the matrix in the same direction as input
 if switched==1, mat4 = mat4'; end
+
+% debugging, controls
+%fprintf(1,'%d\n',refpos);
+% if sum(sum(round(mat1(1:4,:).*10000)/10000,1)~=1) || sum(sum(mat2(1:4,:),1)~=1) 
+%     fprintf(1,'error\n');
+% end

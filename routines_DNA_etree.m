@@ -973,7 +973,7 @@ ref_entunik=zeros(length(setsize),nrep);
 set_entunik=zeros(length(setsize),nrep);
 n=1;
 for s=setsize
-    parfor repeat=1:nrep
+    for repeat=1:nrep
         rndset = randsample(length(true_seq),s) ;
         readset = reads(ismember(read2true,rndset)) ;
         reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
@@ -987,10 +987,6 @@ for s=setsize
         BMUr = zeros(numel(readset),2) ;
         rpositionr = zeros(numel(readset),1) ;
         for r=rindex % weight w must be enough to pull a position toward a different nucleotide
-            if sum(sum(reference.seqvect(1:4,:),1)~=1)
-                display([s r]);
-                break;
-            end
             [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, readset(r).seqvect, 1, w, 0, 1 ) ;
             rpositionr(r) = aligned_pos ;
             BMUr(r,:) = [1 dist] ;
