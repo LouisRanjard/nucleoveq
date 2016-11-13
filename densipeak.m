@@ -33,6 +33,6 @@ function [ centroids ] = densipeak(dmat)
     % dens x d_dens in decreasing order plot
     %plot(sort(dens.*d_dens,'descend'),'o') ;
     
-    centroids = tips( (dens.*d_dens)>mean(dens.*d_dens) ) ;
+    centroids = find( (dens.*d_dens)>mean(dens.*d_dens) >0) ;
 
 end

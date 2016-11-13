@@ -951,7 +951,8 @@ plot_dtwnucleo(tree, weight, true_seq, reference, 1) ;
 % load and format data
 cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq' ;
 addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
-fname='1PopDNA_30_500_5k_07Nov2016_163817';
+fname='1PopDNA_10_500_20k_11Nov2016_141255';
+fname='1PopDNA_40_500_20k_11Nov2016_220426';
 truefasta=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.haplo.fasta'];
 filefq=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.combined.fq'];
 true_seq = fastaread(truefasta);
@@ -965,15 +966,16 @@ end
 plot_dtwnucleo(0, [], true_seq) ;
 % align reads to reference
 nrep=100 ;
-setsize=[2 5 8 11 14 17 20 23 26 29];
+setsize=2:10;
 set_ent=zeros(length(setsize),nrep);
 ref_ent=zeros(length(setsize),nrep);
 ref_entpos=zeros(length(setsize),nrep);
 ref_entunik=zeros(length(setsize),nrep);
 set_entunik=zeros(length(setsize),nrep);
+ref_ent_clust=zeros(length(setsize),nrep);
 n=1;
 for s=setsize
-    for repeat=1:nrep
+    parfor repeat=1:nrep
         rndset = randsample(length(true_seq),s) ;
         readset = reads(ismember(read2true,rndset)) ;
         reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
@@ -1000,13 +1002,17 @@ for s=setsize
         ref_entpos(n,repeat) = sum(shaent>0) ;
         ref_entunik(n,repeat) = numel(unique(shaent)) ;
         set_entunik(n,repeat) = numel(unique(setent)) ;
+        ref_ent_clust(n,repeat) = numel(densipeak(squareform(pdist(shaent(shaent>0)')))) ;
     end
-    fprintf(1,'%d Set entropy: %.3f [%.3f %.3f] - Set ent. unique: %.3f [%.3f %.3f] - Ref entropy: %.3f [%.3f %.3f] - Ref ent. positive: %.3f [%.3f %.3f] - Ref ent. unique: %.3f [%.3f %.3f]\n',s,...
+    fprintf(1,['%d Set entropy: %.3f [%.3f %.3f] - Set ent. unique: %.3f [%.3f %.3f] - ',...
+        'Ref entropy: %.3f [%.3f %.3f] - Ref ent. positive: %.3f [%.3f %.3f] - ',...
+        'Ref ent. unique: %.3f [%.3f %.3f] - Ref ent. clusters: %.3f [%.3f %.3f]\n'],s,...
         mean(set_ent(n,:)),prctile(set_ent(n,:),5),prctile(set_ent(n,:),95),...
         mean(set_entunik(n,:)),prctile(set_entunik(n,:),5),prctile(set_entunik(n,:),95),...
         mean(ref_ent(n,:)),prctile(ref_ent(n,:),5),prctile(ref_ent(n,:),95),...
         mean(ref_entpos(n,:)),prctile(ref_entpos(n,:),5),prctile(ref_entpos(n,:),95),...
-        mean(ref_entunik(n,:)),prctile(ref_entunik(n,:),5),prctile(ref_entunik(n,:),95)) ;
+        mean(ref_entunik(n,:)),prctile(ref_entunik(n,:),5),prctile(ref_entunik(n,:),95),...
+        mean(ref_ent_clust(n,:)),prctile(ref_ent_clust(n,:),5),prctile(ref_ent_clust(n,:),95) ) ;
     n=n+1;
 end
 figure
@@ -1024,8 +1030,8 @@ subplot(5,2,9) ; n=9 ; histogram(set_ent(n,:),edges) ; title([num2str(setsize(n)
 subplot(5,2,10) ; histogram(ref_ent(n,:),edges) ; title('reads aligned') ;
 % plot number of variable sites and number of unique entropy values
 figure
-edges=0:3:100;
-edges1=0:3:100;
+edges=0:30;
+edges1=0:3:300;
 subplot(5,2,1) ; n=1 ; histogram(set_entunik(n,:),edges) ; title({[num2str(setsize(n)) ' haplotypes'], 'true sequences'}) ;
 subplot(5,2,2) ; histogram(ref_entunik(n,:),edges1) ; title({'unique patterns of entropy', 'reads aligned to reference'}) ;
 subplot(5,2,3) ; n=3 ; histogram(set_entunik(n,:),edges) ; title({[num2str(setsize(n)) ' haplotypes'], 'true sequences'}) ;
@@ -1036,3 +1042,79 @@ subplot(5,2,7) ; n=7 ; histogram(set_entunik(n,:),edges) ; title({[num2str(setsi
 subplot(5,2,8) ; histogram(ref_entunik(n,:),edges1) ; title({'unique patterns of entropy', 'reads aligned to reference'}) ;
 subplot(5,2,9) ; n=9 ; histogram(set_entunik(n,:),edges) ; title({[num2str(setsize(n)) ' haplotypes'], 'true sequences'}) ;
 subplot(5,2,10) ; histogram(ref_entunik(n,:),edges1) ; title({'unique patterns of entropy', 'reads aligned to reference'}) ;
+save('/home/louis/Documents/Projects/ShortReads/test_nucleoveq/1PopDNA_10_500_20k_11Nov2016_141255_mapping_experiment.mat',...
+    'set_ent','set_entunik','ref_ent','ref_entunik','ref_ent_clust');
+% plot Entropy value of reference with increasing number of haplotype and arbitrary threshold value
+figure; boxplot(ref_ent',2:10,'Color','b','Symbol','o');ylim([0 .6]);hold on;plot([0 10],[.1 .1]);xlabel('Number of haplotypes'); ylabel('Entropy');
+figure; boxplot(ref_ent_clust',2:10,'Color','b','Symbol','o');hold on;plot([0 10],[5 5]);xlabel('Number of haplotypes'); ylabel('Entropy Clusters');
+% reference entropy is not a very good predictor of the joint entropy of the haplotypes
+figure; 
+for m=1:length(setsize)
+    subplot(3,3,m) ; plot([0 .6],[0 .6],'color',[0.85 0.33 0.1]); hold on; scatter(set_ent(m,:),ref_ent(m,:),'MarkerEdgeColor',[0 0.45 0.74]);
+    xlim([0 .6]); ylim([0 .6]); xlabel('true set','FontSize',10); ylabel('reads on reference','FontSize',10);
+    title([num2str(setsize(m)) ' haplotypes']);
+end
+
+%% test on calculating the probability of a set of haplotype given the reads
+% load and format data
+cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq' ;
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+%fname='1PopDNA_5_500_5k_11Nov2016_163829';
+fname='1PopDNA_40_500_20k_11Nov2016_220426';
+truefasta=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.haplo.fasta'];
+filefq=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.combined.fq'];
+true_seq = fastaread(truefasta);
+for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+reads=fastqread(filefq);
+read2true=zeros(numel(reads),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+    read2true(m)=str2double(reads(m).Header(3:strfind(reads(m).Header,'-')-1));
+end
+% plot_dtwnucleo(0, [], true_seq) ;
+% T=struct('tree',[],'weight',cell(1,10),'BMU',[]);
+% parfor N=1:10
+%     [T(N).tree, T(N).weight, T(N).BMU, ~, ~, ~] = ETDTWrec(reads,10,[1-w 1-w],0.9,[N N],numel(reads),0.95,'seqvect',[],0,0,1,reference,0) ;
+%     fprintf(1,'P(%d)=%.3f\n',N,p_SHR(reads, T(N).tree, T(N).weight, 0, 1)) ;
+% end
+nrep=100 ;
+setsize=5 ;
+numw=1:10 ; % number of weight matrices to project the reads on
+pid=fopen('./outfile.txt','w') ;
+fprintf(pid,['Haplotype_entropy,Haplotype_entropy_clusters,Short_read_entropy,Short_read_entropy_cluster,',...
+    'P_{1}(S|R),P_{1}(H|R),P_{2}(S|R),P_{2}(H|R),P_{3}(S|R),P_{3}(H|R),P_{4}(S|R),P_{4}(H|R),P_{5}(S|R),P_{5}(H|R),',...
+    'P_{6}(S|R),P_{6}(H|R),P_{7}(S|R),P_{7}(H|R),P_{8}(S|R),P_{8}(H|R),P_{9}(S|R),P_{9}(H|R),P_{10}(S|R),P_{10}(H|R)\n']);
+for repeat=1:nrep
+    s=setsize ; % choose randomly "setsize" true haplotype sequences
+    rndset = randsample(length(true_seq),s) ;
+    readset = reads(ismember(read2true,rndset)) ;
+    reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
+    reference.seqvect = mutatematseq(true_seq(randsample(rndset,1)).seqvect,0.02) ;
+    % OR RANDOM reference.seqvect = randmatseq(length(true_seq(1).Sequence)) ;
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    % root weight initialisation: align all reads once to the reference to create initial weight
+    w = 0.0001^(1/numel(readset)) ;
+    rindex = randperm(numel(readset)) ;
+    reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+    BMUr = zeros(numel(readset),2) ;
+    rpositionr = zeros(numel(readset),1) ;
+    for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+        [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, readset(r).seqvect, 1, w, 0, 1 ) ;
+        rpositionr(r) = aligned_pos ;
+        BMUr(r,:) = [1 dist] ;
+    end
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    [ ~, varcov ] = wcoverage(reference.seqvect(1:4,:),size(readset(1).seqvect,2),rpositionr,false) ;
+    reference.varcov = varcov;
+    [reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+    [set_entropy, setent] = shannonEntropy_s({true_seq(rndset).seqvect}) ;
+    fprintf(pid,'%.4f, %d, %.4f, %d, ',set_entropy,numel(densipeak(squareform(pdist(setent(setent>0)')))),...
+                                    reference.entropy,numel(densipeak(squareform(pdist(shaent(shaent>0)'))))) ;
+    for n=numw
+        [tree, weight, BMU, ~, ~, ~] = ETDTWrec(readset,10,[1-w 1-w],0.9,[n n],numel(readset),0.95,'seqvect',[],0,0,1,reference,0) ;
+        [ sum_lproba_SgHR, sum_lproba_HgR  ] = p_SHR(readset, tree, weight, 0, 1) ;
+        fprintf(pid,'%.4f, %.4f, ', sum_lproba_SgHR, sum_lproba_HgR) ;
+    end
+    fprintf(pid,'\n');
+end
+fclose(pid);

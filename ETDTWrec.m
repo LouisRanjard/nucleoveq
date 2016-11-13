@@ -1,4 +1,4 @@
-function [tree, weight, BMU, features, nbmue, weightvarcov] = ETDTWrec(syllab,epoch,LR,NS,NC,thexpan,gama,fieldnam,dico,verbose,ce,fe,reference)
+function [tree, weight, BMU, features, nbmue, weightvarcov] = ETDTWrec(syllab,epoch,LR,NS,NC,thexpan,gama,fieldnam,dico,verbose,ce,fe,reference,allowdividing)
 % performs a Evolving tree clustering analysis (Ranjard2008, Samarasinghe2006, Pakkanen2004)
 
 % syllab.'fieldnam' are the matrices to classify
@@ -24,28 +24,31 @@ function [tree, weight, BMU, features, nbmue, weightvarcov] = ETDTWrec(syllab,ep
 % BMU records the path for each sample in the ETree
 
 % LEARNING AND DISPLAY PARAMETERS
-if nargin<13
-    reference = [] ;
-    if nargin<12
-        fe = 0 ;
-        if nargin<11
-            ce = 0 ;
-            if nargin<10
-                verbose = 0 ;
-                if nargin<9
-                    dico = [] ;
-                    if nargin<8
-                        fieldnam = 'cepvect' ;
-                        if nargin<7
-                            gama = 1 ;
-                            if nargin<6
-                                thexpan = round(numel(syllab)/10) ; % arbitrarily set the splitting threshold
-                                if nargin<5
-                                    NC = [2 2] ; % default is binary trees
-                                    if nargin<4
-                                        NS = [3 3] ;
-                                        if nargin<3
-                                            LR = [0.9 0.01] ; % minimal learning rate (Samarasinghe2006 uses a threshold of 0.01)
+if nargin<14
+    allowdividing=1; % set to 0 to prevent dividing in the tree
+    if nargin<13
+        reference = [] ;
+        if nargin<12
+            fe = 0 ;
+            if nargin<11
+                ce = 0 ;
+                if nargin<10
+                    verbose = 0 ;
+                    if nargin<9
+                        dico = [] ;
+                        if nargin<8
+                            fieldnam = 'cepvect' ;
+                            if nargin<7
+                                gama = 1 ;
+                                if nargin<6
+                                    thexpan = round(numel(syllab)/10) ; % arbitrarily set the splitting threshold
+                                    if nargin<5
+                                        NC = [2 2] ; % default is binary trees
+                                        if nargin<4
+                                            NS = [3 3] ;
+                                            if nargin<3
+                                                LR = [0.9 0.01] ; % minimal learning rate (Samarasinghe2006 uses a threshold of 0.01)
+                                            end
                                         end
                                     end
                                 end
@@ -64,6 +67,7 @@ end
 
 % debugging mode
 DEBUG=0;
+ALLOWDIVIDING=allowdividing;
 
 % output
 rng('shuffle'); % creates a different seed each time
@@ -193,7 +197,7 @@ divided = 0 ; % test to know when there has been dividing event
 %features = cell2table(cell(epoch,5)) ; % store features of the Etree
 %features.Properties.VariableNames = {'TreeSize' 'NumLeaves' 'MappingPrecision' 'AIC' 'BIC'} ;
 features = struct('TreeSize',zeros(1,epoch),'NumLeaves',zeros(1,epoch),'MappingPrecision',zeros(1,epoch),...
-    'AIC',zeros(1,epoch),'BIC',zeros(1,epoch),'AllEntropy',zeros(1,epoch)) ;
+    'AIC',zeros(1,epoch),'BIC',zeros(1,epoch),'AllEntropy',zeros(1,epoch),'sum_lproba_SgHR',zeros(1,epoch),'sum_lproba_HgR',zeros(1,epoch)) ;
 rposition = zeros(numel(syllab),1) ;
 readlen = abs(mean(arrayfun(@(x) length(x.seqvect), syllab))) ;
 
@@ -371,12 +375,17 @@ for e=1:epoch % each epoch
                                         sum(weightcov==0)<(weightcov_factor*wlength), varcov<(varcov_factor*reference.varcov)) ;
         end
         if ( nbmu(BMU(s,1))>=(nbmu(tree(BMU(s,1)))/nbmu_factor) &&...
-                shannonEntropy(weight{BMU(s,1)})>(entropy_factor*cutoff_e) &&...
+                shannonEntropy(weight{BMU(s,1)})>0.1 &&...
                 sum(weightcov==0)<(weightcov_factor*wlength) &&...
-                varcov<(varcov_factor*reference.varcov) )
+                varcov<(varcov_factor*reference.varcov) ) && ALLOWDIVIDING
+        %old,instead of 0.1%        shannonEntropy(weight{BMU(s,1)})>(entropy_factor*cutoff_e) &&...
         %        entrop{BMU(s,1)}(end) > (mean(entrop{BMU(s,1)})+1*var(entrop{BMU(s,1)})) )                                 % AND wEntropy is greater than 2 z-score
         %        entrop{BMU(s,1)}(end) > ( entrop{tree(BMU(s,1))}(end) / 2 ) )                                              % AND wEntropy greater than parent's /2 (BAD : always true)
         % [1:numel(weight) ; nbmu ; cellfun(@(x) x(end),entrop) ; cellfun(@(x) x(end),wentrop)]
+        %%new%%[meanent, shaent]=shannonEntropy(weight{BMU(s,1)});
+        %%new%%if ( numel(densipeak(squareform(pdist(shaent(shaent>0)')))) &&...
+        %%new%%        meanent>0.1 && ALLOWDIVIDING )
+            fprintf(1,'split\n');
             for w=1:numchildren
                 tree = [tree BMU(s,1)] ;
                 if (fe)
@@ -576,7 +585,7 @@ for e=1:epoch % each epoch
     % pw = (1-0.9999)^(1/N)
     pw = 0.0001^(1/numel(syllab)) ;
     %[weight, BMU] = fortify(10, reference.entropy, syllab, weight, pw, BMU, 0, 1, 1) ; % 10 iterations max unless entropy is reached
-    [weight, BMU] = fortify(10, 0, syllab, weight, pw, BMU, 0, 1, 1) ; % 10 iterations max unless entropy is reached
+    [weight, BMU] = fortify(10, 0, syllab, weight, pw, BMU, ce, fe, 0) ; % 10 iterations max unless entropy is reached
     
     %% Save some features of the Etree
     features.TreeSize(e) = numel(tree) ;
@@ -586,11 +595,13 @@ for e=1:epoch % each epoch
 %     features.AIC(e) = 2*numtips-2*log(1/p(e)) ;
 %     features.BIC(e) = -2*log(1/p(e))+numtips*log(numsyll) ;
     features.AllEntropy(e) = shannonEntropy_s(weight(tips)) ;
+    [features.sum_lproba_SgHR(e), features.sum_lproba_HgR(e)] = p_SHR(syllab, tree, weight, ce, fe) ;
     fprintf(fileid,'\n%s/%g\t %s\t ',sprintf(['%0' num2str(length(num2str(epoch))) 'd'],e),epoch,char(datetime('now'))); % format the printing of "e" to have the same width as "epoch"
     if verbose==1
         fprintf(fileid,'%f\t %f\t %f\t %g\t %g', NeSt, p(e), DB(end), numel(tree), numtips ) ;
     else
-        fprintf(fileid,'%.2f\t %.4f\t %.4f\t %.4f\t %g\t %g', NeSt, p(e), se(e), features.AllEntropy(e), numel(tree), numtips ) ;        
+        fprintf(fileid,'%.2f\t %.4f\t %.4f\t %.4f\t %g\t %g %.4f\t %.4f\t',...
+            NeSt, p(e), se(e), features.AllEntropy(e), numel(tree), numtips, features.sum_lproba_SgHR(e), features.sum_lproba_HgR(e) ) ;        
     end
     
     %% check some criteria to stop learning
@@ -601,15 +612,17 @@ for e=1:epoch % each epoch
     % Check if overall entropy is decreasing (=overfitting)
     %if (e>2 && features.AllEntropy(e)<features.AllEntropy(e-2)),  fprintf(fileid,'\n#*** Joint tips entropy is decreasing ***\n'); break; end
     % Stopping criteria NOT met -> Force the dividing of the highest entropy node
-    [~,hottip] = max(sew) ;
-    for w=1:numchildren
-        tree = [tree hottip] ;
-        if (fe)
-            weight{numel(tree)} = weight{hottip} ; % simply copy parent node
-            weightvarcov{numel(tree)} = 0 ;
+    if ALLOWDIVIDING
+        [~,hottip] = max(sew) ;
+        for w=1:numchildren
+            tree = [tree hottip] ;
+            if (fe)
+                weight{numel(tree)} = weight{hottip} ; % simply copy parent node
+                weightvarcov{numel(tree)} = 0 ;
+            end
+            nbmu = [nbmu 0] ;
+            nbmue = [nbmue 0] ;
         end
-        nbmu = [nbmu 0] ;
-        nbmue = [nbmue 0] ;
     end
     % DISPLAY?
     if verbose==1, axes(mapprec); plot(p); drawnow; end
