@@ -3,7 +3,7 @@ function [ randseq ] = randmatseq(len)
 % encoded as 4 element vectors
 % each base is at same frequency (roughly if mod(len,4)>0)
 
-    a = diag(ones(1,4)) ;
+    a = diag(ones(1,4)) ; % 50% GC content
     b = repmat(a,1,len) ;
     randseq = b(:,randperm(len)) ;
 

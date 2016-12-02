@@ -1056,6 +1056,7 @@ for m=1:length(setsize)
 end
 
 %% test on calculating the probability of a set of haplotype given the reads
+% use a constant numebr of true haplotype and map to several fixed number of weights
 % load and format data
 cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq' ;
 addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
@@ -1116,5 +1117,508 @@ for repeat=1:nrep
         fprintf(pid,'%.4f, %.4f, ', sum_lproba_SgHR, sum_lproba_HgR) ;
     end
     fprintf(pid,'\n');
+end
+fclose(pid);
+
+
+%% tests on recovering the true number of haplotypes
+cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq' ;
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+fname='1PopDNA_40_500_20k_11Nov2016_220426';
+truefasta=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.haplo.fasta'];
+filefq=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.combined.fq'];
+true_seq = fastaread(truefasta);
+for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+reads=fastqread(filefq);
+read2true=zeros(numel(reads),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+    read2true(m)=str2double(reads(m).Header(3:strfind(reads(m).Header,'-')-1));
+end
+nrep=100 ;
+setsize=10 ;
+parfor repeat=1:nrep
+    pid=fopen(['./outfile_num_haplo10_14Nov2016_' num2str(repeat) '.txt'],'w') ;
+    fprintf(pid,'Haplotype_entropy,Haplotype_entropy_clusters,Short_read_entropy,Short_read_entropy_cluster,P(S|R),P(H|R),Num_Weight\n');
+    s=setsize ; % choose randomly "setsize" true haplotype sequences
+    rndset = randsample(length(true_seq),s) ;
+    readset = reads(ismember(read2true,rndset)) ;
+    reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
+    reference.seqvect = mutatematseq(true_seq(randsample(rndset,1)).seqvect,0.02) ;
+    % OR RANDOM reference.seqvect = randmatseq(length(true_seq(1).Sequence)) ;
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    % root weight initialisation: align all reads once to the reference to create initial weight
+    w = 0.0001^(1/numel(readset)) ;
+    rindex = randperm(numel(readset)) ;
+    reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+    BMUr = zeros(numel(readset),2) ;
+    rpositionr = zeros(numel(readset),1) ;
+    for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+        [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, readset(r).seqvect, 1, w, 0, 1 ) ;
+        rpositionr(r) = aligned_pos ;
+        BMUr(r,:) = [1 dist] ;
+    end
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    [ ~, varcov ] = wcoverage(reference.seqvect(1:4,:),size(readset(1).seqvect,2),rpositionr,false) ;
+    reference.varcov = varcov;
+    [reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+    [set_entropy, setent] = shannonEntropy_s({true_seq(rndset).seqvect}) ;
+    fprintf(pid,'%.4f, %d, %.4f, %d, ',set_entropy,numel(densipeak(squareform(pdist(setent(setent>0)')))),...
+                                    reference.entropy,numel(densipeak(squareform(pdist(shaent(shaent>0)'))))) ;
+    [tree, weight, BMU, ~, ~, ~] = ETDTWrec(readset,10,[1-w 1-w],0.9,[2 2],numel(readset),0.95,'seqvect',[],0,0,1,reference,1) ;
+    [ sum_lproba_SgHR, sum_lproba_HgR  ] = p_SHR(readset, tree, weight, 0, 1) ;
+    fprintf(pid,'%.4f, %.4f, %d\n', sum_lproba_SgHR, sum_lproba_HgR, numel(unique(BMU(:,1)))) ;
+    fclose(pid);
+end
+% load data
+d=zeros(100,7);
+n=1;
+for k = 1:100
+    if exist(['./outfile_num_haplo10_14Nov2016_' num2str(k) '.txt'], 'file') == 2
+        dat = importdata(['./outfile_num_haplo_14Nov2016_' num2str(k) '.txt'],',',1) ;
+        d(k,:) = dat.data ;
+        n=n+1;
+    end
+end
+% metadata:
+% outfile_num_haplo_13Nov2016_* : 5 true haplotypes, divide at end of each epoch
+% outfile_num_haplo_14Nov2016_* : 5 true haplotypes, divide at end of each epoch if Ent>0.1
+% outfile_num_haplo10_14Nov2016_* : 10 true haplotypes, divide at end of each epoch if Ent>0.1
+figure;scatter(d(d(:,7)>0,1),d(d(:,7)>0,7));
+figure;scatter(d(d(:,7)>0,2),d(d(:,7)>0,7));
+figure;scatter(d(d(:,7)>0,3),d(d(:,7)>0,7));
+figure;scatter(d(d(:,7)>0,4),d(d(:,7)>0,7));
+figure;scatter(d(d(:,7)>0,5),d(d(:,7)>0,7));
+figure;scatter(d(d(:,7)>0,6),d(d(:,7)>0,7));
+
+
+%% test stopping criteria
+% only divide at the end of each epoch
+cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq/test_numhaplo' ;
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+fname='1PopDNA_40_500_20k_11Nov2016_220426';
+truefasta=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.haplo.fasta'];
+filefq=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.combined.fq'];
+true_seq = fastaread(truefasta);
+for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+reads=fastqread(filefq);
+read2true=zeros(numel(reads),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+    read2true(m)=str2double(reads(m).Header(3:strfind(reads(m).Header,'-')-1));
+end
+nrep=100 ;
+parfor repeat=1:nrep
+    sizes=[5 10 15] ;
+    x=randi(3);
+    setsize=sizes(x) ;
+    s=setsize ; % choose randomly "setsize" true haplotype sequences
+    rndset = randsample(length(true_seq),s) ;
+    readset = reads(ismember(read2true,rndset)) ;
+    reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
+    reference.seqvect = mutatematseq(true_seq(randsample(rndset,1)).seqvect,0.02) ;
+    % OR RANDOM reference.seqvect = randmatseq(length(true_seq(1).Sequence)) ;
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    % root weight initialisation: align all reads once to the reference to create initial weight
+    w = 0.0001^(1/numel(readset)) ;
+    rindex = randperm(numel(readset)) ;
+    reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+    BMUr = zeros(numel(readset),2) ;
+    rpositionr = zeros(numel(readset),1) ;
+    for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+        [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, readset(r).seqvect, 1, w, 0, 1 ) ;
+        rpositionr(r) = aligned_pos ;
+        BMUr(r,:) = [1 dist] ;
+    end
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    [ ~, varcov ] = wcoverage(reference.seqvect(1:4,:),size(readset(1).seqvect,2),rpositionr,false) ;
+    reference.varcov = varcov;
+    [reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+    [set_entropy, setent] = shannonEntropy_s({true_seq(rndset).seqvect}) ;
+    [tree, weight, BMU, ~, ~, ~] = ETDTWrec(readset,10,[1-w 1-w],0.9,[2 2],numel(readset),0.95,'seqvect',[],0,0,1,reference,1) ;
+    AllEntropy = shannonEntropy_s(weight(unique(BMU(:,1))')) ;
+    [ sum_lproba_SgHR, sum_lproba_HgR  ] = p_SHR(readset, tree, weight, 0, 1) ;
+    pid=fopen(['./outfile_num10_18Nov2016_' num2str(repeat) '.txt'],'w') ;
+    fprintf(pid,'%d, %.4f, %.4f, %.4f, %.4f, %d\n',setsize, set_entropy, AllEntropy, sum_lproba_SgHR, sum_lproba_HgR, numel(unique(BMU(:,1)))) ;
+    fclose(pid);
+end
+% load data
+d=zeros(100,6);
+n=1;
+for k = 1:100
+    if exist(['./outfile_num10_18Nov2016_' num2str(k) '.txt'], 'file') == 2
+        dat = importdata(['./outfile_num10_18Nov2016_' num2str(k) '.txt'],',') ;
+        d(k,:) = dat ;
+        n=n+1;
+    end
+end
+figure; scatter(d(d(:,1)>0,1),d(d(:,1)>0,2));xlim([0 20]); ylabel('True haplotype set entropy');
+figure; scatter(d(d(:,1)>0,1),d(d(:,1)>0,3));xlim([0 20]); ylabel('Reconstructed haplotype set entropy');
+figure; scatter(d(d(:,1)>0,5),d(d(:,1)>0,4),d(d(:,1)>0,6).^3,d(d(:,1)>0,1),'filled');xlabel('log(P(H|R))');ylabel('log(P(S|H))');
+figure; scatter(d(d(:,1)>0,2),d(d(:,1)>0,3),[],d(d(:,1)>0,1),'filled'); xlabel('True set entropy'); ylabel('Reconstructed set entropy');
+
+
+%% test 3 haplotypes no dividing reads taken in order
+cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq' ;
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+fname='1PopDNA_40_500_20k_11Nov2016_220426';
+truefasta=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.haplo.fasta'];
+filefq=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.combined.fq'];
+true_seq = fastaread(truefasta);
+for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+reads=fastqread(filefq);
+read2true=zeros(numel(reads),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+    read2true(m)=str2double(reads(m).Header(3:strfind(reads(m).Header,'-')-1));
+end
+% T=struct('tree',[],'weight',cell(1,10),'BMU',[]);
+% parfor N=1:10
+%     [T(N).tree, T(N).weight, T(N).BMU, ~, ~, ~] = ETDTWrec(reads,10,[1-w 1-w],0.9,[N N],numel(reads),0.95,'seqvect',[],0,0,1,reference,0) ;
+%     fprintf(1,'P(%d)=%.3f\n',N,p_SHR(reads, T(N).tree, T(N).weight, 0, 1)) ;
+% end
+nrep=100 ;
+setsize=3 ;
+numw=3 ; % number of weight matrices to project the reads on
+pid=fopen('./pooling3/outfile_pooling_rshuff.txt','w') ;
+fprintf(pid,'Pct_sim(weight;best_true),num_SNPs,Pct_sim(true;true)\n');
+for repeat=1:nrep
+    rndset = randsample(length(true_seq),setsize) ; % choose randomly "setsize" true haplotype sequences
+    readset = reads(ismember(read2true,rndset)) ;
+    reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
+    reference.seqvect = mutatematseq(true_seq(randsample(rndset,1)).seqvect,0.02) ;
+    %reference.seqvect = randmatseq(length(true_seq(1).Sequence)) ; % RANDOM
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    % root weight initialisation: align all reads once to the reference to create initial weight
+    w = 0.0001^(1/numel(readset)) ;
+    rindex = randperm(numel(readset)) ;
+    reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+    BMUr = zeros(numel(readset),2) ;
+    rpositionr = zeros(numel(readset),1) ;
+    for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+        [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, readset(r).seqvect, 1, w, 0, 1 ) ;
+        rpositionr(r) = aligned_pos ;
+        BMUr(r,:) = [1 dist] ;
+    end
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    [ ~, varcov ] = wcoverage(reference.seqvect(1:4,:),size(readset(1).seqvect,2),rpositionr,false) ;
+    reference.varcov = varcov;
+    [reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+    [set_entropy, setent] = shannonEntropy_s({true_seq(rndset).seqvect}) ;
+    %for n=numw
+        [~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
+        %I=0; % to disable ordering of the reads
+        [tree, weight, BMU, ~, ~, ~] = ETDTWrec(readset,1,[1-(w/3) 1-(w/3)],0.01,[numw numw],numel(readset),0.95,'seqvect',[],0,0,1,reference,0,I') ;
+        %[ sum_lproba_SgHR, sum_lproba_HgR  ] = p_SHR(readset, tree, weight, 0, 1) ;
+        %fprintf(pid,'%.4f, %.4f, ', sum_lproba_SgHR, sum_lproba_HgR) ;
+    %end
+    %plot_dtwnucleo(tree, weight, true_seq(rndset)) ;
+    %pause;
+    aveminidist = avedist(tree, weight, true_seq(rndset)) ; % average distance between a weight and its closest true sequence
+    Profile = seqprofile(true_seq(rndset),'Alphabet','NT');         % number of SNPs in the true sequences alignment
+    fprintf( pid,'%.4f, %d, %.4f\n', aveminidist, length(Profile)-sum(sum(Profile==1)),...
+        mean(1-seqpdist(true_seq(rndset),'Method','p-distance')) ) ;
+end
+fclose(pid);
+
+%% test 3 haplotypes with different frequencies no dividing reads taken in order
+cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq/pooling3' ;
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+fname='1PopDNA_40_500_20k_11Nov2016_220426';
+truefasta=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.haplo.fasta'];
+true_seq = fastaread(truefasta);
+for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+nrep=100 ;
+setsize=3 ;
+numw=3 ; % number of weight matrices to project the reads on
+pid=fopen('./outfile_pooling_ralignorder_difffreq.txt','w') ;
+fprintf(pid,'Pct_sim(weight;best_true),num_SNPs,Pct_sim(true;true)\n');
+for repeat=1:nrep
+    rndset = randsample(length(true_seq),setsize) ; % choose randomly "setsize" true haplotype sequences
+    % write a new fasta file with different frequencies for the true haplotypes (1:2:5)
+    warnState = warning; %Save the current warning state
+    warning('off','Bioinfo:fastawrite:AppendToFile');
+    fastawrite(['./' fname '_' num2str(repeat) '_varfreq.fa'],true_seq(rndset(1)));
+    fastawrite(['./' fname '_' num2str(repeat) '_varfreq.fa'],true_seq(rndset(2)));
+    fastawrite(['./' fname '_' num2str(repeat) '_varfreq.fa'],true_seq(rndset(2)));
+    fastawrite(['./' fname '_' num2str(repeat) '_varfreq.fa'],true_seq(rndset(3)));
+    fastawrite(['./' fname '_' num2str(repeat) '_varfreq.fa'],true_seq(rndset(3)));
+    fastawrite(['./' fname '_' num2str(repeat) '_varfreq.fa'],true_seq(rndset(3)));
+    fastawrite(['./' fname '_' num2str(repeat) '_varfreq.fa'],true_seq(rndset(3)));
+    fastawrite(['./' fname '_' num2str(repeat) '_varfreq.fa'],true_seq(rndset(3)));
+    warning(warnState) %Reset warning state to previous settings
+    system(['/home/louis/Downloads/art_bin_ChocolateCherryCake/art_illumina -ef -i ./'...
+        fname '_' num2str(repeat) '_varfreq.fa -l 50 -ss HS25 -f 30 -o single_varfreq_' num2str(repeat)]) ;
+    system(['cat single_varfreq_' num2str(repeat)...
+        '_errFree.sam | grep -v ^@ | awk ''{print "@"$1"\n"$10"\n+\n"$11}'' > single_varfreq_' num2str(repeat) '_ef.fastq']) ;
+    readset = fastqread(['single_varfreq_' num2str(repeat) '_ef.fastq']);
+    read2true=zeros(numel(readset),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+    for m=1:numel(readset)
+        readset(m).seqvect=nucleo2mat(readset(m).Sequence) ;
+        read2true(m)=str2double(readset(m).Header(3:strfind(readset(m).Header,'-')-1));
+    end
+    reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
+    reference.seqvect = mutatematseq(true_seq(randsample(rndset,1)).seqvect,0.02) ;
+    %reference.seqvect = randmatseq(length(true_seq(1).Sequence)) ; % RANDOM
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    % root weight initialisation: align all reads once to the reference to create initial weight
+    w = 0.0001^(1/numel(readset)) ;
+    rindex = randperm(numel(readset)) ;
+    reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+    BMUr = zeros(numel(readset),2) ;
+    rpositionr = zeros(numel(readset),1) ;
+    for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+        [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, readset(r).seqvect, 1, w, 0, 1 ) ;
+        rpositionr(r) = aligned_pos ;
+        BMUr(r,:) = [1 dist] ;
+    end
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    [ ~, varcov ] = wcoverage(reference.seqvect(1:4,:),size(readset(1).seqvect,2),rpositionr,false) ;
+    reference.varcov = varcov;
+    [reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+    [set_entropy, setent] = shannonEntropy_s({true_seq(rndset).seqvect}) ;
+    %for n=numw
+        [~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
+        %I=0; % to disable ordering of the reads
+        [tree, weight, BMU, ~, ~, ~] = ETDTWrec(readset,1,[1-(w/3) 1-(w/3)],0.01,[numw numw],numel(readset),0.95,'seqvect',[],0,0,1,reference,0,I') ;
+        %[ sum_lproba_SgHR, sum_lproba_HgR  ] = p_SHR(readset, tree, weight, 0, 1) ;
+        %fprintf(pid,'%.4f, %.4f, ', sum_lproba_SgHR, sum_lproba_HgR) ;
+    %end
+    %plot_dtwnucleo(tree, weight, true_seq(rndset)) ;
+    %pause;
+    aveminidist = avedist(tree, weight, true_seq(rndset)) ; % average distance between a weight and its closest true sequence
+    Profile = seqprofile(true_seq(rndset),'Alphabet','NT'); % number of SNPs in the true sequences alignment
+    fprintf( pid,'%.4f, %d, %.4f\n', aveminidist, length(Profile)-sum(sum(Profile==1)),...
+        mean(1-seqpdist(true_seq(rndset),'Method','p-distance')) ) ;
+end
+fclose(pid);
+
+
+
+%% test 3 haplotypes no dividing reads taken in order, reads taken with errors
+cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq/pooling3' ;
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+fname='1PopDNA_40_500_20k_11Nov2016_220426';
+truefasta=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.haplo.fasta'];
+true_seq = fastaread(truefasta);
+for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+nrep=100 ;
+setsize=3 ;
+numw=3 ; % number of weight matrices to project the reads on
+pid=fopen('./outfile_pooling_ralignorder_errorreads_trimmed.txt','w') ;
+fprintf(pid,'Pct_sim(weight;best_true),num_SNPs,Pct_sim(true;true)\n');
+for repeat=1:nrep
+    rndset = randsample(length(true_seq),setsize) ; % choose randomly "setsize" true haplotype sequences
+    warnState = warning; %Save the current warning state
+    warning('off','Bioinfo:fastawrite:AppendToFile');
+    fastawrite(['./' fname '_' num2str(repeat) '_readerr.fa'],true_seq(rndset(1)));
+    fastawrite(['./' fname '_' num2str(repeat) '_readerr.fa'],true_seq(rndset(2)));
+    fastawrite(['./' fname '_' num2str(repeat) '_readerr.fa'],true_seq(rndset(3)));
+    warning(warnState) %Reset warning state to previous settings
+    system(['/home/louis/Downloads/art_bin_ChocolateCherryCake/art_illumina -ef -i ./' fname '_' num2str(repeat) ...
+        '_readerr.fa -l 50 -ss HS25 -f 30 -o single_readerr_' num2str(repeat)]) ;
+    delete(['./' fname '_' num2str(repeat) '_readerr.fa']);
+    % Read quality trimming and filtering
+    filtrd = seqtrim(['single_readerr_' num2str(repeat) '.fq'],'Method','MaxNumberLowQualityBases','Threshold',[0 15],'WindowSize',10) ;
+    filtrd2 = seqfilter(filtrd,'Method','MinLength','Threshold',1) ;
+    readset = fastqread(filtrd2{1});
+    %readset = fastqread(['single_readerr_' num2str(repeat) '.fq']);
+    for m=1:numel(readset)
+        quali = qual2accu(readset(m).Quality,33) ;
+        readset(m).seqvect=nucleo2mat(readset(m).Sequence,quali) ;
+    end
+    reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
+    reference.seqvect = mutatematseq(true_seq(randsample(rndset,1)).seqvect,0.02) ;
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    % root weight initialisation: align all reads once to the reference to create initial weight
+    w = 0.0001^(1/numel(readset)) ;
+    rindex = randperm(numel(readset)) ;
+    reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+    BMUr = zeros(numel(readset),2) ;
+    rpositionr = zeros(numel(readset),1) ;
+    for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+        [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, readset(r).seqvect, 1, w, 0, 1 ) ;
+        rpositionr(r) = aligned_pos ;
+        BMUr(r,:) = [1 dist] ;
+    end
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    %[ ~, varcov ] = wcoverage(reference.seqvect(1:4,:),size(readset(1).seqvect,2),rpositionr,false) ;
+    %reference.varcov = varcov;
+    reference.varcov = 0;
+    [reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+    [set_entropy, setent] = shannonEntropy_s({true_seq(rndset).seqvect}) ;
+    %for n=numw
+        [~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
+        %I=0; % to disable ordering of the reads
+        [tree, weight, BMU, ~, ~, ~] = ETDTWrec(readset,1,[1-(w/3) 1-(w/3)],0.01,[numw numw],numel(readset),0.95,'seqvect',[],0,0,1,reference,0,I') ;
+        %[ sum_lproba_SgHR, sum_lproba_HgR  ] = p_SHR(readset, tree, weight, 0, 1) ;
+        %fprintf(pid,'%.4f, %.4f, ', sum_lproba_SgHR, sum_lproba_HgR) ;
+    %end
+    %plot_dtwnucleo(tree, weight, true_seq(rndset)) ;
+    %pause;
+    aveminidist = avedist(tree, weight, true_seq(rndset)) ; % average distance between a weight and its closest true sequence
+    Profile = seqprofile(true_seq(rndset),'Alphabet','NT'); % number of SNPs in the true sequences alignment
+    fprintf( pid,'%.4f, %d, %.4f\n', aveminidist, length(Profile)-sum(sum(Profile==1)),...
+        mean(1-seqpdist(true_seq(rndset),'Method','p-distance')) ) ;
+end
+fclose(pid);
+
+
+%% test estimating the original number of haplotypes using reference matrix only
+cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq/pooling3' ;
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+fname='1PopDNA_40_500_20k_11Nov2016_220426';
+truefasta=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.haplo.fasta'];
+true_seq = fastaread(truefasta);
+for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+filefq=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.combined.fq'];
+reads=fastqread(filefq);
+read2true=zeros(numel(reads),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+    read2true(m)=str2double(reads(m).Header(3:strfind(reads(m).Header,'-')-1));
+end
+nrep=100 ;
+pid=fopen('./outfile_pooling_numhaplo.txt','w') ;
+fprintf(pid,'Num_haplo,Estimate\n');
+for repeat=1:nrep
+    setsize=randi([2 10]) ;
+    rndset = randsample(length(true_seq),setsize) ; % choose randomly "setsize" true haplotype sequences
+    readset = reads(ismember(read2true,rndset)) ;
+    reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
+    reference.seqvect = mutatematseq(true_seq(randsample(rndset,1)).seqvect,0.02) ;
+    %reference.seqvect = randmatseq(length(true_seq(1).Sequence)) ; % RANDOM
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    % root weight initialisation: align all reads once to the reference to create initial weight
+    w = 0.0001^(1/numel(readset)) ;
+    rindex = randperm(numel(readset)) ;
+    reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+    BMUr = zeros(numel(readset),2) ;
+    rpositionr = zeros(numel(readset),1) ;
+    for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+        [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, readset(r).seqvect, 1, w, 0, 1 ) ;
+        rpositionr(r) = aligned_pos ;
+        BMUr(r,:) = [1 dist] ;
+    end
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    [ ~, varcov ] = wcoverage(reference.seqvect(1:4,:),size(readset(1).seqvect,2),rpositionr,false) ;
+    reference.varcov = varcov;
+    densipeak(squareform(pdist(sort(reference.seqvect(1:4,:))')))
+    fprintf( pid,'%d, %d\n', setsize, ) ;
+end
+fclose(pid);
+%%% DOES NOT WORK TOO MANY CENTROIDS ARE FOUND
+
+
+%% test 3/5/10 haplotypes no dividing reads taken in order, longer haplotype sequence and read length
+% art_illumina -ef -i 1PopDNA_40_1200_20k_28Nov2016_171414.haplo.fasta -p -l 150 -ss HS25 -f 30 -m 530 -s 0 -o 1PopDNA_40_1200_20k_28Nov2016_171414.paired
+cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq/pooling3' ;
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+fname='1PopDNA_40_1200_20k_28Nov2016_171414';
+truefasta=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.haplo.fasta'];
+filefq=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.combined.fq'];
+true_seq = fastaread(truefasta);
+for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+reads=fastqread(filefq);
+read2true=zeros(numel(reads),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+    read2true(m)=str2double(reads(m).Header(3:strfind(reads(m).Header,'-')-1));
+end
+nrep=100 ;
+setsize=3 ;
+numw=setsize ; % number of weight matrices to project the reads on
+%pid=fopen('./outfile_pooling10_ralignorder_long.txt','w') ;
+pid=fopen('./outfile_pooling3_ralignorder_long_pctTrueSibling.txt','w') ;
+%pid=1;
+fprintf(pid,'Pct_sim(weight;best_true),num_SNPs,Pct_sim(true;true),Pct_sim(true_sibling)\n');
+for repeat=1:nrep
+    rndset = randsample(length(true_seq),setsize) ; % choose randomly "setsize" true haplotype sequences
+    readset = reads(ismember(read2true,rndset)) ;
+    reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
+    reference.seqvect = mutatematseq(true_seq(randsample(rndset,1)).seqvect,0.02) ;
+    %reference.seqvect = randmatseq(length(true_seq(1).Sequence)) ; % RANDOM REFERENCE
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    % root weight initialisation: align all reads once to the reference to create initial weight
+    w = 0.0001^(1/numel(readset)) ;
+    rindex = randperm(numel(readset)) ;
+    reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+    BMUr = zeros(numel(readset),2) ;
+    rpositionr = zeros(numel(readset),1) ;
+    for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+        [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, readset(r).seqvect, 1, w, 0, 1 ) ;
+        rpositionr(r) = aligned_pos ;
+        BMUr(r,:) = [1 dist] ;
+    end
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    [ ~, reference.varcov ] = wcoverage(reference.seqvect(1:4,:),size(readset(1).seqvect,2),rpositionr,false) ;
+    [reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+    %[set_entropy, setent] = shannonEntropy_s({true_seq(rndset).seqvect}) ;
+    [~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
+    %[tree, weight, BMU, ~, ~, ~] = ETDTWrec(readset,1,[1-(w/3) 1-(w/3)],0.01,[numw numw],numel(readset),0.95,'seqvect',[],0,0,1,reference,0,I') ;
+    [tree, weight, BMU, ~, ~, ~] = ETDTWrec(readset,1,[1-(w/numw) 1-(w/numw)],0.01,[numw numw],numel(readset),0.95,'seqvect',[],0,0,1,reference,0,I') ;
+    [aveminidist, pct_mini_is_true] = avedist(tree, weight, true_seq(rndset)) ; % average distance between a weight and its closest true sequence
+    Profile = seqprofile(true_seq(rndset),'Alphabet','NT'); % number of SNPs in the true sequences alignment
+    fprintf( pid,'%.4f, %d, %.4f, %.4f\n', aveminidist, length(Profile)-sum(sum(Profile==1)),...
+        mean(1-seqpdist(true_seq(rndset),'Method','p-distance')), pct_mini_is_true ) ;
+end
+fclose(pid);
+
+
+%% test indels on 1 haplotype
+cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq/pooling3' ;
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+fname='1PopDNA_40_1200_20k_28Nov2016_171414';
+truefasta=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.haplo.fasta'];
+filefq=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.combined.fq'];
+true_seq = fastaread(truefasta);
+for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+reads=fastqread(filefq);
+read2true=zeros(numel(reads),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+    read2true(m)=str2double(reads(m).Header(3:strfind(reads(m).Header,'-')-1));
+end
+nrep=100 ;
+setsize=1 ;
+pid=fopen('./outfile_pooling_long_indels.txt','w') ;
+fprintf(pid,'Pct_sim(weight;true),length(reference),length(reconstructed),length(true)\n');
+for repeat=1:nrep
+    rndset = randsample(length(true_seq),setsize) ;
+    readset = reads(ismember(read2true,rndset)) ;
+    reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
+    reference.seqvect = mutatematseq(true_seq(rndset).seqvect,0.1) ;
+    % introduce indels in reference
+    % In human, 0.04 indels per 100 nucleotides (1.5 million in total in human genome) from:
+    % Mills RE, Luttig CT, Larkins CE, Beauchamp A, Tsui C, Pittard WS, Devine SE: An initial map of insertion and deletion (INDEL) variation in the human genome. Genome Research. 2006, 16 (9): 1182-1190. 10.1101/gr.4565806.
+    x=[ 1 0 0 0 ]' ; % 1 nucleotide
+    numin = randi(5) ; % up to 5 insertion
+    inpos = sort( randi(length(reference.seqvect),1,numin) ) ; % choose numin random positions
+    for n = 1:numin
+        reference.seqvect = [ reference.seqvect(:,1:inpos(n)) [x(randperm(4))] reference.seqvect(:,(inpos(n)+1):end)] ;
+    end
+    numdel = randi(5) ; % up to 5 deletion
+    delpos = sort( randi(length(reference.seqvect)-numdel,1,numdel) ) ;
+    for n = 1:numdel
+        reference.seqvect = [ reference.seqvect(:,1:(delpos(n)-1)) reference.seqvect(:,(delpos(n)+1):end) ] ;
+    end
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    L = length(reference.Sequence) ;
+    % align all reads once to the reference to reconstruct haplotype
+    w = 0.0001^(1/numel(readset)) ;
+    rindex = randperm(numel(readset)) ;
+    reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+    for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+        [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, readset(r).seqvect, 1, w, 0, 1 ) ;
+        reference.seqvect = reference.seqvect(:, reference.seqvect(5,:)>0.9) ; % delete insertion
+        for n=find(reference.seqvect(5,:)>1.1)
+            reference.seqvect = [ reference.seqvect(:,1:n) [x(randperm(4));1] reference.seqvect(:,(n+1):end)] ; % insert deletion
+            reference.seqvect(5,n) = 1 ; % reset persistence counter
+        end
+    end
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    [~,Ali] = swalign(reference.Sequence,true_seq(rndset).Sequence);
+    d = seqpdist([Ali(1,:);Ali(3,:)],'Method','p-distance') ;
+    fprintf( pid,'%.4f, %d, %d, %d\n', 1-d, L, length(reference.seqvect), length(true_seq(rndset).Sequence)); 
 end
 fclose(pid);
