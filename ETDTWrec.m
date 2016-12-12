@@ -18,9 +18,10 @@ function [tree, weight, BMU, features, nbmue, weightvarcov] = ETDTWrec(syllab,ep
 % dico is a classification to be used to improve the convergence of the clustering
 %       must be decreasingly ordered according to the distance
 % verbose: verbose mode? 1 or 0
-% allowdiving: 0 = no splitting allowed, 
-%              1 = splitting at the end of each epoch only, 
-%              >1= splitting allowed during epoch
+% allowdividing: 0 = no splitting allowed, 
+%                1 = splitting at the end of each epoch only, 
+%                2 = splitting allowed during epoch
+%                3 = copying of weight matrix if counter reached and it exists a weight matrix with 0 hits 
 %
 % example ETDTWrec(syllab,5,[0.9 0.01],[4 1],[2 2],numel(syllab)*0.2,0.95,'cepvect',[],1)
 %
@@ -362,7 +363,7 @@ for e=1:epoch % each epoch
         seqvectnull = [ repmat([1; 0; 0; 0],1,defined) repmat([.25; .25; .25; .25],1,undefined) ] ;
         cutoff_e = shannonEntropy(seqvectnull) ;
         % get statistics on coverage
-        if allowdividing>0
+        if ( allowdividing==1 || allowdividing==2 )
           [ weightcov, varcov, ~ ] = wcoverage( weight{BMU(s,1)}, readlen, rposition(BMU(:,1)==BMU(s,1)) ) ;
           weightvarcov{BMU(s,1)} = [weightvarcov{BMU(s,1)} varcov] ;
         end
@@ -389,7 +390,7 @@ for e=1:epoch % each epoch
             fprintf(filelog2,'%d\t%d\t%d\t%d\n',nbmu(BMU(s,1))>=(nbmu(tree(BMU(s,1)))/nbmu_factor), shannonEntropy(weight{BMU(s,1)})>(entropy_factor*cutoff_e),...
                                         sum(weightcov==0)<(weightcov_factor*wlength), varcov<(varcov_factor*reference.varcov)) ;
         end
-        if allowdividing>1 && ( nbmu(BMU(s,1))>=(nbmu(tree(BMU(s,1)))/nbmu_factor) &&...
+        if allowdividing==2 && ( nbmu(BMU(s,1))>=(nbmu(tree(BMU(s,1)))/nbmu_factor) &&...
                 shannonEntropy(weight{BMU(s,1)})>0.1 &&...
                 sum(weightcov==0)<(weightcov_factor*wlength) &&...
                 varcov<(varcov_factor*reference.varcov) )
@@ -414,6 +415,14 @@ for e=1:epoch % each epoch
             end
         %elseif nbmu(BMU(s,1)) >= ( nbmu(tree(BMU(s,1))) / 2 )
         %    disp(false);
+        end
+        %%% copy BMU weight matrix to a no hit BMU
+        if (  allowdividing==3 && ( nbmu(BMU(s,1))>(numel(syllab)/NC(1)) )  )
+            nohits=find(nbmu==0);
+            if length(nohits)>0
+                nohitsid=nohits(randi(length(nohits)));
+                weight{nohitsid}=weight{BMU(s,1)} ; % copy the weight matrix
+            end
         end
         %%%%% computes WITHIN CLUSTER INDEX (DaviesBouldin clustering index)
         %clustidx = unique(BMU(BMU(:,:,1)>0)) ; % the nodes used in the tree !!DO NOT WORK IN OCTAVE!!
@@ -630,7 +639,7 @@ for e=1:epoch % each epoch
     % Check if overall entropy is decreasing (=overfitting)
     %if (e>2 && features.AllEntropy(e)<features.AllEntropy(e-2)),  fprintf(fileid,'\n#*** Joint tips entropy is decreasing ***\n'); break; end
     % Stopping criteria NOT met -> Force the dividing of the highest entropy node
-    if allowdividing>0
+    if ( allowdividing==1 || allowdividing==2 )
         [went,hottip] = max(sew) ;
         if (went>0.1)
             for w=1:numchildren

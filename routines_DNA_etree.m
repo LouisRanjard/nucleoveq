@@ -1556,11 +1556,13 @@ for repeat=1:nrep
     %[set_entropy, setent] = shannonEntropy_s({true_seq(rndset).seqvect}) ;
     [~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
     %[tree, weight, BMU, ~, ~, ~] = ETDTWrec(readset,1,[1-(w/3) 1-(w/3)],0.01,[numw numw],numel(readset),0.95,'seqvect',[],0,0,1,reference,0,I') ;
-    [tree, weight, BMU, ~, ~, ~] = ETDTWrec(readset,1,[1-(w/numw) 1-(w/numw)],0.01,[numw numw],numel(readset),0.95,'seqvect',[],0,0,1,reference,0,I') ;
+    %[tree, weight, BMU, ~, ~, ~] = ETDTWrec(readset,1,[1-(w/numw) 1-(w/numw)],0.01,[numw numw],numel(readset),0.95,'seqvect',[],0,0,1,reference,0,I') ;
+    [tree, weight, BMU, ~, ~, ~] = ETDTWrec(readset,1,[1-(w/numw) 1-(w/numw)],0.01,[numw numw],numel(readset),0.95,'seqvect',[],0,0,1,reference,3,I') ; % copy weight trick
     [aveminidist, pct_mini_is_true] = avedist(tree, weight, true_seq(rndset)) ; % average distance between a weight and its closest true sequence
     Profile = seqprofile(true_seq(rndset),'Alphabet','NT'); % number of SNPs in the true sequences alignment
     fprintf( pid,'%.4f, %d, %.4f, %.4f\n', aveminidist, length(Profile)-sum(sum(Profile==1)),...
         mean(1-seqpdist(true_seq(rndset),'Method','p-distance')), pct_mini_is_true ) ;
+    %plot_dtwnucleo(tree, weight, true_seq(rndset), reference, 1) ;
 end
 fclose(pid);
 
@@ -1622,3 +1624,19 @@ for repeat=1:nrep
     fprintf( pid,'%.4f, %d, %d, %d\n', 1-d, L, length(reference.seqvect), length(true_seq(rndset).Sequence)); 
 end
 fclose(pid);
+
+
+%% use paired end information
+cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq/pooling3' ;
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+fname='1PopDNA_40_1200_20k_28Nov2016_171414';
+truefasta=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.haplo.fasta'];
+filefq=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.combined.fq'];
+true_seq = fastaread(truefasta);
+for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+reads=fastqread(filefq);
+read2true=zeros(numel(reads),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+    read2true(m)=str2double(reads(m).Header(3:strfind(reads(m).Header,'-')-1));
+end
