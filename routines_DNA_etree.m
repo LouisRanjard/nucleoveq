@@ -1465,6 +1465,7 @@ fclose(pid);
 
 
 %% test estimating the original number of haplotypes using reference matrix only
+% clustering the columns of the reference matrix
 cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq/pooling3' ;
 addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
 fname='1PopDNA_40_500_20k_11Nov2016_220426';
@@ -1510,7 +1511,7 @@ fclose(pid);
 %%% DOES NOT WORK TOO MANY CENTROIDS ARE FOUND
 
 
-%% test 3/5/10 haplotypes no dividing reads taken in order, longer haplotype sequence and read length
+%% test 3/5/10/20 haplotypes no dividing reads taken in order, longer haplotype sequence and read length
 % art_illumina -ef -i 1PopDNA_40_1200_20k_28Nov2016_171414.haplo.fasta -p -l 150 -ss HS25 -f 30 -m 530 -s 0 -o 1PopDNA_40_1200_20k_28Nov2016_171414.paired
 cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq/pooling3' ;
 addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
@@ -1526,10 +1527,10 @@ for m=1:numel(reads)
     read2true(m)=str2double(reads(m).Header(3:strfind(reads(m).Header,'-')-1));
 end
 nrep=100 ;
-setsize=3 ;
+setsize=20 ;
 numw=setsize ; % number of weight matrices to project the reads on
 %pid=fopen('./outfile_pooling10_ralignorder_long.txt','w') ;
-pid=fopen('./outfile_pooling3_ralignorder_long_pctTrueSibling.txt','w') ;
+pid=fopen('./outfile_pooling20_ralignorder_long_pctTrueSibling.txt','w') ;
 %pid=1;
 fprintf(pid,'Pct_sim(weight;best_true),num_SNPs,Pct_sim(true;true),Pct_sim(true_sibling)\n');
 for repeat=1:nrep
@@ -1548,7 +1549,7 @@ for repeat=1:nrep
     for r=rindex % weight w must be enough to pull a position toward a different nucleotide
         [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, readset(r).seqvect, 1, w, 0, 1 ) ;
         rpositionr(r) = aligned_pos ;
-        BMUr(r,:) = [1 dist] ;
+        BMUr(r,:) = [1 dist] ;  ~zz
     end
     reference.Sequence = mat2nucleo(reference.seqvect) ;
     [ ~, reference.varcov ] = wcoverage(reference.seqvect(1:4,:),size(readset(1).seqvect,2),rpositionr,false) ;
@@ -1626,17 +1627,139 @@ end
 fclose(pid);
 
 
-%% use paired end information
-cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq/pooling3' ;
+%% NCI script to run BEAST as long as the above
+function [] = run1job(repeat)
+    cd '/short/l74/lxr808/sr_beast/known_numhaplo' ;
+    addpath('/short/l74/lxr808/nucleoveq');
+    fname='1PopDNA_40_1200_20k_28Nov2016_171414';
+    truefasta=['/short/l74/lxr808/sr_beast/known_numhaplo/' fname '.haplo.fasta'];
+    filefq=['/short/l74/lxr808/sr_beast/known_numhaplo/' fname '.combined.fq'];
+    true_seq = fastaread(truefasta);
+    for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+    reads=fastqread(filefq);
+    read2true=zeros(numel(reads),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+    for m=1:numel(reads)
+        reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+        read2true(m)=str2double(reads(m).Header(3:strfind(reads(m).Header,'-')-1));
+    end
+    setsize=10 ;
+    numw=setsize ; % number of weight matrices to project the reads on
+    datenow = datestr(datetime('now'),'ddmmmyyyy') ;
+    pid=fopen(['./outfile_pooling10_' datenow '_' repeat '.txt'],'w') ;
+    fprintf(pid,['Pct_sim(weight;best_true),num_SNPs,Pct_sim(true;true),Pct_sim(true_sibling)'...
+                 ',q05(Ne_true),median(Ne_true),q95(Ne_true),q05(Ne_reconstructed),median(Ne_reconstructed),q95(Ne_reconstructed)\n']);
+    rng('shuffle'); % creates a different seed each time
+    rndset = randsample(length(true_seq),setsize) ; % choose randomly "setsize" true haplotype sequences
+    % write down the true fasta sequences and call BEAST
+    fastawrite(['./true_' num2str(setsize) '_' num2str(repeat) '.fa'],true_seq(rndset)) ;
+    system(['../beautigen.sh ' num2str(setsize) ' 0 ./true_' num2str(setsize) '_' num2str(repeat) '.fa true_' num2str(setsize) '_' num2str(repeat)]) ;
+    x = importdata(['beautigen__' datenow '_true_' num2str(setsize) '_' num2str(repeat) '.log']) ;
+    med_Ne_true = median(x.data(:,7)) ;
+    q05_Ne_true = quantile(x.data(:,7),.05) ;
+    q95_Ne_true = quantile(x.data(:,7),.95) ;
+    readset = reads(ismember(read2true,rndset)) ;
+    reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
+    reference.seqvect = mutatematseq(true_seq(randsample(rndset,1)).seqvect,0.02) ;
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    % root weight initialisation: align all reads once to the reference to create initial weight
+    w = 0.0001^(1/numel(readset)) ;
+    rindex = randperm(numel(readset)) ;
+    reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+    BMUr = zeros(numel(readset),2) ;
+    rpositionr = zeros(numel(readset),1) ;
+    for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+        [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, readset(r).seqvect, 1, w, 0, 1 ) ;
+        rpositionr(r) = aligned_pos ;
+        BMUr(r,:) = [1 dist] ;
+    end
+    reference.Sequence = mat2nucleo(reference.seqvect) ;
+    [ ~, reference.varcov ] = wcoverage(reference.seqvect(1:4,:),size(readset(1).seqvect,2),rpositionr,false) ;
+    [reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+    [~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
+    [tree, weight, BMU, ~, ~, ~] = ETDTWrec(readset,1,[1-(w/numw) 1-(w/numw)],0.01,[numw numw],numel(readset),0.95,'seqvect',[],0,0,1,reference,3,I') ; % copy weight trick
+    % write down the reconstructed fasta sequences and call BEAST
+    weight2fasta(tree,weight,['./reconstructed_' num2str(setsize) '_' num2str(repeat) '.fa']);
+    system(['../beautigen.sh ' num2str(setsize) ' 0 ./reconstructed_' num2str(setsize) '_' num2str(repeat) '.fa reconstructed_' num2str(setsize) '_' num2str(repeat)]) ;
+    x = importdata(['beautigen__' datenow '_reconstructed_' num2str(setsize) '_' num2str(repeat) '.log']) ;
+    med_Ne_reco = median(x.data(:,7)) ;
+    q05_Ne_reco = quantile(x.data(:,7),.05) ;
+    q95_Ne_reco = quantile(x.data(:,7),.95) ;
+    [aveminidist, pct_mini_is_true] = avedist(tree, weight, true_seq(rndset)) ; % average distance between a weight and its closest true sequence
+    Profile = seqprofile(true_seq(rndset),'Alphabet','NT'); % number of SNPs in the true sequences alignment
+    fprintf( pid,'%.4f, %d, %.4f, %.4f, %.0f, %.0f, %.0f, %.0f, %.0f, %.0f\n', aveminidist, length(Profile)-sum(sum(Profile==1)),...
+        mean(1-seqpdist(true_seq(rndset),'Method','p-distance')), pct_mini_is_true,...
+        q05_Ne_true, med_Ne_true, q95_Ne_true, q05_Ne_reco, med_Ne_reco, q95_Ne_reco ) ;
+    fclose(pid);
+end
+
+
+%% Try to assemble kangaroo pooling data
 addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
-fname='1PopDNA_40_1200_20k_28Nov2016_171414';
-truefasta=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.haplo.fasta'];
-filefq=['/home/louis/Documents/Projects/ShortReads/test_nucleoveq/' fname '.combined.fq'];
-true_seq = fastaread(truefasta);
-for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/' ;
+filefq='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/NormalizedErrorCorrected10_S10_L001_R_001.fastq';
 reads=fastqread(filefq);
-read2true=zeros(numel(reads),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
 for m=1:numel(reads)
     reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
-    read2true(m)=str2double(reads(m).Header(3:strfind(reads(m).Header,'-')-1));
 end
+setsize=3 ;
+numw=setsize ; % number of weight matrices to project the reads on
+datenow = datestr(datetime('now'),'ddmmmyyyy') ;
+rng('shuffle'); % creates a different seed each time
+reference=fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/Macropus_giganteus_mt.fasta');
+reference.seqvect = nucleo2mat(reference.Sequence) ;
+% root weight initialisation: align all reads once to the reference to create initial weight
+w = 0.0001^(1/numel(reads)) ;
+rindex = randperm(numel(reads)) ;
+reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+BMUr = zeros(numel(reads),2) ;
+rpositionr = zeros(numel(reads),1) ;
+for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+    [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w, 0, 1 ) ;
+    rpositionr(r) = aligned_pos ;
+    BMUr(r,:) = [1 dist] ;
+end
+reference.Sequence = mat2nucleo(reference.seqvect) ;
+[ ~, reference.varcov ] = wcoverage(reference.seqvect(1:4,:),size(reads(1).seqvect,2),rpositionr,false) ;
+[reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+[~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
+[tree, weight, BMU, ~, ~, ~] = ETDTWrec(reads,1,[1-(w/numw) 1-(w/numw)],0.01,[numw numw],numel(reads),0.95,'seqvect',[],0,0,1,reference,3,I') ; % copy weight trick
+% write down the reconstructed fasta sequences and call BEAST
+weight2fasta(tree,weight,['./S10_reconstructed_' num2str(setsize) '.fa']);
+% not very good, do not normalize?
+
+
+%% Use the pairing information and do not normalize the reads
+% force the two pairs to be aligned to the same weight matrix
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/' ;
+fr1='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/10_S10_L001_R1_001.fastq';
+fr2='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/10_S10_L001_R2_001.fastq';
+reads=fastqread(fr1);
+reads2=fastqread(fr2);
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+end
+setsize=3 ;
+numw=setsize ; % number of weight matrices to project the reads on
+datenow = datestr(datetime('now'),'ddmmmyyyy') ;
+rng('shuffle'); % creates a different seed each time
+reference=fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/Macropus_giganteus_mt.fasta');
+reference.seqvect = nucleo2mat(reference.Sequence) ;
+% root weight initialisation: align all reads once to the reference to create initial weight
+w = 0.0001^(1/numel(reads)) ;
+rindex = randperm(numel(reads)) ;
+reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+BMUr = zeros(numel(reads),2) ;
+rpositionr = zeros(numel(reads),1) ;
+for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+    [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w, 0, 1 ) ;
+    rpositionr(r) = aligned_pos ;
+    BMUr(r,:) = [1 dist] ;
+end
+reference.Sequence = mat2nucleo(reference.seqvect) ;
+[ ~, reference.varcov ] = wcoverage(reference.seqvect(1:4,:),size(reads(1).seqvect,2),rpositionr,false) ;
+[reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+[~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
+[tree, weight, BMU, ~, ~, ~] = ETDTWrec(reads,1,[1-(w/numw) 1-(w/numw)],0.01,[numw numw],numel(reads),0.95,'seqvect',[],0,0,1,reference,3,I') ; % copy weight trick
+% write down the reconstructed fasta sequences and call BEAST
+weight2fasta(tree,weight,['./S10_reconstructed_' num2str(setsize) '_noNorm.fa']);

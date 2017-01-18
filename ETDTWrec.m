@@ -79,6 +79,15 @@ end
 % debugging mode
 DEBUG=0;
 
+% Are the reads paired-end?
+if iscell(syllab)
+    pairs=syllab{2};
+    syllab=syllab{1};
+    paired=1;
+else
+    paired=0;
+end
+
 % output
 rng('shuffle'); % creates a different seed each time
 filename = ['dtwaven_' num2str(epoch) '_' num2str(randi(1e6)) '.out'] ;
@@ -175,6 +184,7 @@ end
 
 % print the parameter values
 fprintf(fileid,'#%g sequence matrices loaded\n',numel(syllab)) ;
+fprintf(fileid,'#reference.length %.4f\n',max(size(reference.seqvect))) ;
 if isfield(reference,'varcov')
     fprintf(fileid,'#reference.varcov %.4f\n',reference.varcov) ;
 end
@@ -331,8 +341,13 @@ for e=1:epoch % each epoch
                         %mat2nucleo( weight{L}(:,(aligned_pos-size(syllab(s).(fieldnam),2)+1):aligned_pos) )
                         %mat2nucleo( updated_weight(:,original_pos:(original_pos+size(syllab(s).(fieldnam),2)-1)) )
                     end
-                    weight{L}=updated_weight;
+                    weight{L} = updated_weight ;
                 %end
+                %%%%% IF PAIRED-END READS ALIGN THE PAIR TO THE SAME WEIGHT
+                if paired==1
+                    [ ~, updated_weight ] = DTWaverage( weight{L}, pairs(s).(fieldnam), 1, H, ce, fe ) ;
+                    weight{L} = updated_weight ;
+                end
         end
         %%%%% increases nbmu 
         if DEBUG
@@ -575,6 +590,9 @@ for e=1:epoch % each epoch
     end
     % weight decay on hit counter (Pakkanen2006) after each epoch
     nbmu = round(gama.*nbmu) ;
+    if ( allowdividing==3 ) % reset read counter to 0
+      nbmu = nbmu .* 0 ;
+    end
     % expansion size decay (Louis2007)
     numchildren = max( NC(1)-(round(NC(1)/epoch)) , NC(2) ) ;
     % Mapping precision
@@ -627,8 +645,13 @@ for e=1:epoch % each epoch
     if verbose==1
         fprintf(fileid,'%f\t %f\t %f\t %g\t %g', NeSt, p(e), DB(end), numel(tree), numtips ) ;
     else
-        fprintf(fileid,'%.2f\t %.4f\t %.4f\t %.4f\t %g\t %g %.4f\t %.4f\t',...
-            NeSt, p(e), se(e), features.AllEntropy(e), numel(tree), numtips, features.sum_lproba_SgHR(e), features.sum_lproba_HgR(e) ) ;        
+        if (features.sum_lproba_SgHR(e)~=0 && features.sum_lproba_HgR(e)~=0)
+            fprintf(fileid,'%.2f\t %.4f\t %.4f\t %.4f\t %g\t %g\t %.4f\t %.4f\t',...
+                NeSt, p(e), se(e), features.AllEntropy(e), numel(tree), numtips, features.sum_lproba_SgHR(e), features.sum_lproba_HgR(e) ) ;  
+        else
+            fprintf(fileid,'%.2f\t %.4f\t %.4f\t %.4f\t %g\t %g',...
+                NeSt, p(e), se(e), features.AllEntropy(e), numel(tree), numtips ) ;
+        end
     end
     
     %% check some criteria to stop learning
