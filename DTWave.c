@@ -17,16 +17,16 @@
 /* #include <stdio.h> for debugging */
 
 /* PROTOTYPES */
-double warpav(double *traceb, double *d, int numrows, int numcols, double *indelc, int fe, double *refpos);
-double warpav_ce(double *traceb, double *d, int numrows, int numcols, double *indelc, int fe, double *refpos);
-double *averseq(int *duree, double *traceb, double *mat1, double *mat2, double weight, int numrows, int numcols, int numv);
-double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, double weight, int numrows, int numcols, int numv1, int numv2);
+double warpav(double *traceb, double *d, int numrows, int numcols, double *indelc, int fe, double *refend);
+double warpav_ce(double *traceb, double *d, int numrows, int numcols, double *indelc, int fe, double *refend);
+double *averseq(int *duree, double *traceb, double *mat1, double *mat2, double weight, int numrows, int numcols, int numv, double *refstart);
+double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, double weight, int numrows, int numcols, int numv1, int numv2, double *refstart);
 int mincost(double cost[], int a, int b);
 double louiround(double x);
 void euclidist(double *d, double *mat1, double *mat2, double *indelc, int numrows, int numcols, int numv1, int numv2, double *cow, int fe);
 void vecdist(double *d, double *mat1, double *mat2, double *indelc, int numrows, int numcols, int numv1, int numv2, double *cow, int fe);
 
-double warpav_ce(double *traceb, double *d, int numrows, int numcols, double *indelc, int fe, double *refpos)
+double warpav_ce(double *traceb, double *d, int numrows, int numcols, double *indelc, int fe, double *refend)
 {
     int i,j,k = 0 ; /* i rows ; j cols ; k traceback */
     double cost[5] ;
@@ -140,7 +140,7 @@ for (i=0;i<=numcols;i++) {
    return dist ;
 }
 
-double warpav(double *traceb, double *d, int numrows, int numcols, double *indelc, int fe, double *refpos)
+double warpav(double *traceb, double *d, int numrows, int numcols, double *indelc, int fe, double *refend)
 {
     int i,j,k = 0 ; /* i rows ; j cols ; k traceback */
     double cost[4] ; /* need to keep 4 cells for compatibility with warpav_ce */
@@ -210,7 +210,7 @@ double warpav(double *traceb, double *d, int numrows, int numcols, double *indel
                lowest_cost_position=j;
            } 
        }
-       *refpos = lowest_cost_position;
+       *refend = lowest_cost_position;
        /* if (minj<mini) {dist = minj;} else {dist = mini;} */
        dist = minj / (double)(numrows+numcols);
        /* update the path at the end of the last row for deletions only, until pattern is found */
@@ -246,7 +246,7 @@ printf("\n"); */
 }
 
 /* compute the average sequence given the alignment */
-double *averseq(int *duree, double *traceb, double *mat1, double *mat2, double weight, int numrows, int numcols, int numv)
+double *averseq(int *duree, double *traceb, double *mat1, double *mat2, double weight, int numrows, int numcols, int numv, double *refstart)
 {
     int i,j,n=0;
     int l=0;
@@ -333,7 +333,7 @@ double *averseq(int *duree, double *traceb, double *mat1, double *mat2, double w
 }
 
 /* compute the average sequence given the alignment */
-double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, double weight, int numrows, int numcols, int numv1, int numv2)
+double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, double weight, int numrows, int numcols, int numv1, int numv2, double *refstart)
 {
     int i,j,n=0;
     int l=0;
@@ -343,6 +343,7 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
     int *t;
     int n_del=0, n_ins=0; /* count number of insertions and deletions into mat1 */
     int it; /*DEBUG*/
+    int refstart_saved=0;
 
     mat4 = (double *)mxMalloc((numcols+numrows)*(numv1)*sizeof(double)) ;
     t = (int *)mxMalloc((numcols+numrows)*sizeof(int)) ; /* store position index */
@@ -403,10 +404,11 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
                printf("error: traceback no match\n");
                break;
        }
+       if (refstart_saved==0 && i==0) { *refstart=(float)j; refstart_saved=1; } 
        /*printf("l=%d t=%d |",l,*(t+l));for (n=0;n<numv1;n++) { printf("%f ",l,*(mat4+n+(numv1*l))); } printf("|\n");*/
        l++;
     }
-    /*printf("\nnumcols=%i,numrows=%i,numv1=%i,numv2=%i,maxt=%i,l=%i,n_del=%i,n_ins=%i\n",numcols,numrows,numv1,numv2,maxt,l,n_del,n_ins); */
+    /*printf("\nnumcols=%i,numrows=%i,numv1=%i,numv2=%i,maxt=%i,l=%i,n_del=%i,n_ins=%i,refstart=%f\n",numcols,numrows,numv1,numv2,maxt,l,n_del,n_ins,*refstart);*/
     /*printf("t:\n"); for ( it=0 ; it<=maxt ; it++ ) { printf("%d ",*(t+it)); } printf("\n");*/
     
     /* compute average with correct time direction and number of time points */
@@ -519,20 +521,23 @@ void euclidist(double *d, double *mat1, double *mat2, double *indelc, int numrow
     return ;
 }
 
-/* compute distance between vectors of 2 matrices, mat2 is {0,1}* and looks only at position with {1} in mat2 in both matrices 
-   the insertion deletion cost is set as  */
+/* compute distance between vectors of 2 matrices, mat2 is {0,1}* and looks only at position with {1} in mat2 in both matrices.
+   UPDATE: look at position (base) in the read that has maximum probability (in case quality is taken into account) 
+   the insertion deletion cost is set as 2 */
 void vecdist(double *d, double *mat1, double *mat2, double *indelc, int numrows, int numcols, int numv1, int numv2, double *cow, int fe)
 {
-    int i,j,n ;
+    int i,j,n,m ;
 
     for (i=0;i<numcols;i++) {
         for (j=0;j<numrows;j++) {
             *(d+((numrows)*i)+j)=0;
+            m=0;
             for ( n=0 ; n<numv2 ; n++ ) {
                 /* if (i==0) printf("%f\n",(*(mat1+n+((numv+1)*(j))))); */
-                if ( (*(mat2+n+(numv2*(i))))==1 ){ /* only consider the base of the read */
+                /* if ( (*(mat2+n+(numv2*(i))))==1 ){ only consider the base of the read that have 1 */
+                if ( (*(mat2+n+(numv2*(i))))>m ){ /* UPDATE: only consider the base of the read with maximum probability */
+                    m=(*(mat2+n+(numv2*(i)))) ;
                     *(d+((numrows)*i)+j) = fabs( (*(mat2+n+(numv2*(i))))-(*(mat1+n+(numv1*(j)))) ) ;
-                    break ;
                 }
             }
             /* printf("%f\n",*(d+((numrows)*i)+j)); */
@@ -550,7 +555,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     int numrows, numcols, numv, numv1, numv2, *duree, ce, fe ;
     /* mwSize numrows, numcols, numv, *duree ; */
     double weight ;
-    double *refpos=0 ;
+    double *refend=0 ;
+    double *refstart=0 ;
 
     mat1 = mxGetPr(prhs[0]);
     mat2 = mxGetPr(prhs[1]);
@@ -567,9 +573,9 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     
     /* if free ends alignment, second matrix must be pattern to find in first matrix */
     if (fe){
-        if (numcols>numrows) {
+        /*if (numcols>numrows) {
             mexErrMsgIdAndTxt("DTWave:mexFunction","Matrix 2 must be shorter than matrix 1");
-        }
+        }*/
         if (ce) {
             mexErrMsgIdAndTxt("DTWave:mexFunction","Free ends alignment is not implemented with compression/expansion yet");
         }
@@ -580,13 +586,15 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     traceb = (double *)mxMalloc((numrows+1) * (numcols+1) * sizeof(double));
     indelc = (double *)mxMalloc(sizeof(double));
     duree = (int *)mxMalloc(sizeof(int));
-    refpos = (double *)mxMalloc(sizeof(double));
+    refend = (double *)mxMalloc(sizeof(double));
+    refstart = (double *)mxMalloc(sizeof(double));
     
     /* Create variable for return values and get pointers */
     plhs[0] = mxCreateNumericMatrix(1, 1, mxDOUBLE_CLASS, mxREAL); /* DISTANCE */
     distance = mxGetPr(plhs[0]);
     plhs[1] = mxCreateNumericMatrix(0, 0, mxDOUBLE_CLASS, mxREAL); /* AVERAGE VECTOR SEQUENCE */
-    plhs[2] = mxCreateNumericMatrix(1, 1, mxDOUBLE_CLASS, mxREAL); /* POSITION IN MATRIX 1 */
+    plhs[2] = mxCreateNumericMatrix(1, 1, mxDOUBLE_CLASS, mxREAL); /* POSITION IN MATRIX 1 END */
+    plhs[3] = mxCreateNumericMatrix(1, 1, mxDOUBLE_CLASS, mxREAL); /* POSITION IN MATRIX 1 START */
 
     /* compute pairwise vector distance */
     *indelc = 0 ;
@@ -598,24 +606,26 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     }
     
     /* Call the warpav subroutine */
+    *refend = numrows ; /* by default the alignment length is the length of mat1 */
     if (ce){
-        *distance = warpav_ce(traceb,d,numrows,numcols,indelc,fe,refpos) ;
+        *distance = warpav_ce(traceb,d,numrows,numcols,indelc,fe,refend) ;
     }else{
-        *distance = warpav(traceb,d,numrows,numcols,indelc,fe,refpos) ;
+        *distance = warpav(traceb,d,numrows,numcols,indelc,fe,refend) ;
     }
     
     numv = numv2 ; /* TO BE FIXED */
     /* Call the traceback subroutine to get the average sequence */
+    *refstart = 0 ; /* by default the alignment starts at 0 */
     if ( weight!=0 ) {
         if (fe){
-            mataverage = averseq_fe(duree,traceb,mat1,mat2,weight,numrows,numcols,numv1,numv2);
+            mataverage = averseq_fe(duree,traceb,mat1,mat2,weight,numrows,numcols,numv1,numv2,refstart);
             /* set the pointer for return matrix */
             mxSetPr( plhs[1], mataverage );
             mxSetM( plhs[1], numv+1 );
             mxSetN( plhs[1], *duree );
             mexMakeMemoryPersistent(mataverage); /* memory deallocation bug with octave */
         }else{
-            mataverage = averseq(duree,traceb,mat1,mat2,weight,numrows,numcols,numv);
+            mataverage = averseq(duree,traceb,mat1,mat2,weight,numrows,numcols,numv,refstart);
             /* set the pointer for return matrix */
             mxSetPr( plhs[1], mataverage );
             mxSetM( plhs[1], numv );
@@ -623,7 +633,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
             mexMakeMemoryPersistent(mataverage); /* memory deallocation bug with octave */
         }
     }
-    mxSetPr( plhs[2], refpos );
+    mxSetPr( plhs[2], refend );
+    mxSetPr( plhs[3], refstart );
     
     mxFree(duree);
     mxFree(d);

@@ -1,4 +1,4 @@
-function [ dist, mat4, refpos ] = DTWaverage( mat1, mat2, cow, q, ce, fe )
+function [ dist, mat4, refend, refstart ] = DTWaverage( mat1, mat2, cow, q, ce, fe )
 % perform a dynamic time warping in order to measure a distance between matrices
 % according to the algorithm of Oommen1995
 % Kruskal&Liberman in Chapt4 Sankoff&Kruskal1999 (time warps...)
@@ -67,7 +67,7 @@ end
 
 %%%%%%%%%%%%%% CALL THE C FUNCTION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% need to be compiled first: mex GCC=/usr/bin/gcc-4.7 COPTIMFLAGS=-O3 [path]/DTWave.c
-[dist, mat4, refpos] = DTWave(mat1,mat2,cow,q,ce,fe);
+[dist, mat4, refend, refstart] = DTWave(mat1,mat2,cow,q,ce,fe);
 
 % return the matrix in the same direction as input
 if switched==1, mat4 = mat4'; end

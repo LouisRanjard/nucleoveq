@@ -1695,8 +1695,8 @@ end
 
 %% Try to assemble kangaroo pooling data
 addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
-cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/' ;
-filefq='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/NormalizedErrorCorrected10_S10_L001_R_001.fastq';
+cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10' ;
+filefq='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/NormalizedErrorCorrected10_S10_L001_R_001.fastq';
 reads=fastqread(filefq);
 for m=1:numel(reads)
     reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
@@ -1725,23 +1725,22 @@ reference.Sequence = mat2nucleo(reference.seqvect) ;
 [tree, weight, BMU, ~, ~, ~] = ETDTWrec(reads,1,[1-(w/numw) 1-(w/numw)],0.01,[numw numw],numel(reads),0.95,'seqvect',[],0,0,1,reference,3,I') ; % copy weight trick
 % write down the reconstructed fasta sequences and call BEAST
 weight2fasta(tree,weight,['./S10_reconstructed_' num2str(setsize) '.fa']);
-% not very good, do not normalize?
+% not very good, do not normalize? use pariedend info? increase coverage? increase fuzzyness (neighbrohood strength)?...
 
 
-%% Use the pairing information and do not normalize the reads
+%% Use the pairend-end reads information
 % force the two pairs to be aligned to the same weight matrix
 addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
-cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/' ;
-fr1='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/10_S10_L001_R1_001.fastq';
-fr2='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/10_S10_L001_R2_001.fastq';
-reads=fastqread(fr1);
-reads2=fastqread(fr2);
+cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10' ;
+filefq='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/NormalizedErrorCorrected10_S10_L001_R_001.fastq';
+reads=fastqread(filefq);
 for m=1:numel(reads)
     reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
 end
+reads1=reads(1:2:numel(reads));
+reads2=reads(2:2:numel(reads));
 setsize=3 ;
 numw=setsize ; % number of weight matrices to project the reads on
-datenow = datestr(datetime('now'),'ddmmmyyyy') ;
 rng('shuffle'); % creates a different seed each time
 reference=fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/Macropus_giganteus_mt.fasta');
 reference.seqvect = nucleo2mat(reference.Sequence) ;
@@ -1760,6 +1759,115 @@ reference.Sequence = mat2nucleo(reference.seqvect) ;
 [ ~, reference.varcov ] = wcoverage(reference.seqvect(1:4,:),size(reads(1).seqvect,2),rpositionr,false) ;
 [reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
 [~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
-[tree, weight, BMU, ~, ~, ~] = ETDTWrec(reads,1,[1-(w/numw) 1-(w/numw)],0.01,[numw numw],numel(reads),0.95,'seqvect',[],0,0,1,reference,3,I') ; % copy weight trick
+[tree, weight, BMU, ~, ~, ~] = ETDTWrec({reads1, reads2},1,[1-(w/numw) 1-(w/numw)],0.01,[numw numw],numel(reads),0.95,'seqvect',[],0,0,1,reference,3,I') ; % copy weight trick
 % write down the reconstructed fasta sequences and call BEAST
-weight2fasta(tree,weight,['./S10_reconstructed_' num2str(setsize) '_noNorm.fa']);
+weight2fasta(tree,weight,['./S10_reconstructed_' num2str(setsize) '_pe.fa']);
+
+
+%% Increase fuzzyness
+% set neighborhood strength to 1 which is the max distance possible in a tree with depth 1
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10' ;
+filefq='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/NormalizedErrorCorrected10_S10_L001_R_001.fastq';
+reads=fastqread(filefq);
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+end
+reads1=reads(1:2:numel(reads));
+reads2=reads(2:2:numel(reads));
+setsize=3 ;
+numw=setsize ; % number of weight matrices to project the reads on
+rng('shuffle'); % creates a different seed each time
+reference=fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/Macropus_giganteus_mt.fasta');
+reference.seqvect = nucleo2mat(reference.Sequence) ;
+% root weight initialisation: align all reads once to the reference to create initial weight
+w = 0.0001^(1/numel(reads)) ;
+rindex = randperm(numel(reads)) ;
+reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+BMUr = zeros(numel(reads),2) ;
+rpositionr = zeros(numel(reads),1) ;
+for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+    [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w, 0, 1 ) ;
+    rpositionr(r) = aligned_pos ;
+    BMUr(r,:) = [1 dist] ;
+end
+reference.Sequence = mat2nucleo(reference.seqvect) ;
+[ ~, reference.varcov ] = wcoverage(reference.seqvect(1:4,:),size(reads(1).seqvect,2),rpositionr,false) ;
+[reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+[~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
+[tree, weight, BMU, ~, ~, ~] = ETDTWrec({reads1, reads2},1,[1-(w/numw) 1-(w/numw)],1,[numw numw],numel(reads),0.95,'seqvect',[],0,0,1,reference,3,I') ; % copy weight trick
+% write down the reconstructed fasta sequences and call BEAST
+weight2fasta(tree,weight,['./S10_reconstructed_' num2str(setsize) '_pe_fuzz.fa']);
+
+
+%% Only update the local region in reference where the reads align in all the weights
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10' ;
+filefq='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/NormalizedErrorCorrected10_S10_L001_R_001.fastq';
+reads=fastqread(filefq);
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+end
+reads1=reads(1:2:numel(reads));
+reads2=reads(2:2:numel(reads));
+setsize=3 ;
+numw=setsize ; % number of weight matrices to project the reads on
+rng('shuffle'); % creates a different seed each time
+reference=fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/Macropus_giganteus_mt.fasta');
+reference.seqvect = nucleo2mat(reference.Sequence) ;
+% root weight initialisation: align all reads once to the reference to create initial weight
+w = 0.0001^(1/numel(reads)) ;
+rindex = randperm(numel(reads)) ;
+reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+BMUr = zeros(numel(reads),2) ;
+rpositionr = zeros(numel(reads),1) ;
+for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+    [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w, 0, 1 ) ;
+    rpositionr(r) = aligned_pos ;
+    BMUr(r,:) = [1 dist] ;
+end
+reference.Sequence = mat2nucleo(reference.seqvect) ;
+[ ~, reference.varcov ] = wcoverage(reference.seqvect(1:4,:),size(reads(1).seqvect,2),rpositionr,false) ;
+[reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+[~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
+[tree, weight, BMU, ~, ~, ~] = ETDTWrec({reads1, reads2},1,[1-(w/numw) 1-(w/numw)],1,[numw numw],numel(reads),0.95,'seqvect',[],0,0,1,reference,3,I',1) ; % copy weight trick
+% write down the reconstructed fasta sequences and call BEAST
+weight2fasta(tree,weight,['./S10_reconstructed_' num2str(setsize) '_pe_fuzz_local.fa']);
+% issues at beginning and end of alignment, need to implement indels
+
+
+%% implement indels in ETDTWrec
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10' ;
+filefq='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/NormalizedErrorCorrected10_S10_L001_R_001.fastq';
+reads=fastqread(filefq);
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+end
+reads1=reads(1:2:numel(reads));
+reads2=reads(2:2:numel(reads));
+setsize=3 ;
+numw=setsize ; % number of weight matrices to project the reads on
+rng('shuffle'); % creates a different seed each time
+reference=fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/Macropus_giganteus_mt.fasta');
+reference.seqvect = nucleo2mat(reference.Sequence) ;
+% root weight initialisation: align all reads once to the reference to create initial weight
+w = 0.0001^(1/numel(reads)) ;
+rindex = randperm(numel(reads)) ;
+reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+BMUr = zeros(numel(reads),2) ;
+rpositionr = zeros(numel(reads),1) ;
+for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+    [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w, 0, 1 ) ;
+    rpositionr(r) = aligned_pos ;
+    BMUr(r,:) = [1 dist] ;
+end
+reference.Sequence = mat2nucleo(reference.seqvect) ;
+[ ~, reference.varcov ] = wcoverage(reference.seqvect(1:4,:),size(reads(1).seqvect,2),rpositionr,false) ;
+[reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+[~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
+[tree, weight, BMU, ~, ~, ~] = ETDTWrec({reads1, reads2},1,[1-(w/numw) 1-(w/numw)],1,[numw numw],numel(reads),...
+                                        0.95,'seqvect',[],0,0,1,reference,3,I',0,1) ; % copy weight trick
+% write down the reconstructed fasta sequences and call BEAST
+weight2fasta(tree,weight,['./S10_reconstructed_' num2str(setsize) '_pe_fuzz_indels.fa']);
+% crashed because shannonEntropy_s() cannot deal with haplotypes of different lengths

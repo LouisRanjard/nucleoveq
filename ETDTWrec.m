@@ -1,5 +1,5 @@
 function [tree, weight, BMU, features, nbmue, weightvarcov] = ETDTWrec(syllab,epoch,LR,NS,NC,thexpan,gama,fieldnam,dico,...
-    verbose,ce,fe,reference,allowdividing,rorder)
+    verbose,ce,fe,reference,allowdividing,rorder,localregion,indels)
 % performs a Evolving tree clustering analysis (Ranjard2008, Samarasinghe2006, Pakkanen2004)
 
 % syllab.'fieldnam' are the matrices to classify
@@ -30,32 +30,40 @@ function [tree, weight, BMU, features, nbmue, weightvarcov] = ETDTWrec(syllab,ep
 % BMU records the path for each sample in the ETree
 
 % LEARNING AND DISPLAY PARAMETERS
-if nargin<15 || length(rorder)~=size(syllab,2)
-    shuffread=1; % by default shuffle the order of the read
-    if nargin<14
-        allowdividing=2; % set to 0 to prevent dividing in the tree
-        if nargin<13
-            reference = [] ;
-            if nargin<12
-                fe = 0 ;
-                if nargin<11
-                    ce = 0 ;
-                    if nargin<10
-                        verbose = 0 ;
-                        if nargin<9
-                            dico = [] ;
-                            if nargin<8
-                                fieldnam = 'cepvect' ;
-                                if nargin<7
-                                    gama = 1 ;
-                                    if nargin<6
-                                        thexpan = round(numel(syllab)/10) ; % arbitrarily set the splitting threshold
-                                        if nargin<5
-                                            NC = [2 2] ; % default is binary trees
-                                            if nargin<4
-                                                NS = [3 3] ;
-                                                if nargin<3
-                                                    LR = [0.9 0.01] ; % minimal learning rate (Samarasinghe2006 uses a threshold of 0.01)
+shuffread=0;
+if length(rorder)~=size(syllab,2), shuffread=1; end
+if nargin<17
+    indels=0;
+    if nargin<16
+        localregion=0;
+        if nargin<15
+            shuffread=1; % by default shuffle the order of the read
+            if nargin<14
+                allowdividing=2; % set to 0 to prevent dividing in the tree
+                if nargin<13
+                    reference = [] ;
+                    if nargin<12
+                        fe = 0 ;
+                        if nargin<11
+                            ce = 0 ;
+                            if nargin<10
+                                verbose = 0 ;
+                                if nargin<9
+                                    dico = [] ;
+                                    if nargin<8
+                                        fieldnam = 'cepvect' ;
+                                        if nargin<7
+                                            gama = 1 ;
+                                            if nargin<6
+                                                thexpan = round(numel(syllab)/10) ; % arbitrarily set the splitting threshold
+                                                if nargin<5
+                                                    NC = [2 2] ; % default is binary trees
+                                                    if nargin<4
+                                                        NS = [3 3] ;
+                                                        if nargin<3
+                                                            LR = [0.9 0.01] ; % minimal learning rate (Samarasinghe2006 uses a threshold of 0.01)
+                                                        end
+                                                    end
                                                 end
                                             end
                                         end
@@ -68,8 +76,11 @@ if nargin<15 || length(rorder)~=size(syllab,2)
             end
         end
     end
-else
-    shuffread=0;
+end
+
+if (localregion && indels)
+    error('Local update and indels options cannot be used simultaneously');
+    % following indels in the weights, the indexes of the weights may not be compatible (different regions)
 end
 
 if numel(reference)>0 && ~isfield(reference,'varcov')
@@ -293,9 +304,9 @@ for e=1:epoch % each epoch
             %%%%% mapping precision
             P = P + BMU(s,dep,2) ;
         else % only store last BMU index and score
-            [ treepath, aligned_pos ] =  findBMU(syllab(s).seqvect, tree, weight, ce, fe);
+            [ treepath, aliend ] =  findBMU(syllab(s).seqvect, tree, weight, ce, fe);
             BMU(s,:) = treepath ;
-            rposition(s) = aligned_pos ;
+            rposition(s) = aliend ;
             %%%%% mapping precision
             P = P + BMU(s,2) ;
         end
@@ -317,36 +328,75 @@ for e=1:epoch % each epoch
 %             end
 %         end
         %%%%% UPDATE the tree except the root in the neighbourhood of the Best Matching Unit by pulling them closer to the input matrix
+        % first update the BMU and save the positions where the read align in reference
+        [ ~, updated_weight, aliend, alistart ] = DTWaverage( weight{BMU(s,1)}, syllab(s).(fieldnam), 1, 1-Ftime, ce, fe ) ;
+        weight{BMU(s,1)} = updated_weight ;
+        if paired==1
+            [ ~, updated_weight, aliendp, alistartp ] = DTWaverage( weight{BMU(s,1)}, pairs(s).(fieldnam), 1, 1-Ftime, ce, fe ) ;
+            weight{BMU(s,1)} = updated_weight ;
+        end
         % H is the weight for the first matrix sent to DTWaverage (weight{L}), 
         % hence it needs to increase with distance from BMU (Edist) ???BUG???
         for L=2:numel(tree)
                 %%%%% NEIGHBORHOOD SIZE
                 if DEBUG
+                    if L==BMU(s,dep,1)
+                        continue;
+                    end
                     Edist = TreeDist(tree,BMU(s,dep,1),L) ;
                 else
+                    if L==BMU(s,1)
+                        continue;
+                    end
                     Edist = TreeDist(tree,BMU(s,1),L) ;
                 end
                 %Fdist = exp( (-Edist^2)/(2*(NeSt*exp(-e/(epoch*0.5)))^2) ) ; % old bug
                 Fdist = exp( (-Edist^2)/(2*(NeSt)^2) ) ;
-                H = Ftime*Fdist ; % Learning Rate x Tree  Distance
+                H = Ftime*Fdist ; % Learning Rate x Tree Distance
                 if fe
                     H = 1 - H ;
                 end
                 %%%%% LEARNING STEP
                 %if ( H>0.01 ) % in order to save time if the factor is too small do not compute
-                    [ ~, updated_weight, aligned_pos ] = DTWaverage( weight{L}, syllab(s).(fieldnam), 1, H, ce, fe ) ;
-                    if DEBUG && fe && L==BMU(s,dep,1) && ( aligned_pos~=(original_pos+size(syllab(s).(fieldnam),2)-1) ) % aligned_pos is index in C (start at 0)
-                        %mat2nucleo( syllab(s).(fieldnam) )
-                        %mat2nucleo( weight{L}(:,original_pos:(original_pos+size(syllab(s).(fieldnam),2)-1)) )
-                        %mat2nucleo( weight{L}(:,(aligned_pos-size(syllab(s).(fieldnam),2)+1):aligned_pos) )
-                        %mat2nucleo( updated_weight(:,original_pos:(original_pos+size(syllab(s).(fieldnam),2)-1)) )
+                if localregion
+                    region = weight{L}(:,(alistart+1):aliend) ; % region of syllab to align read to
+                    [ ~, updated_region ] = DTWaverage( region, syllab(s).(fieldnam), 1, H, ce, fe ) ;
+                    updated_weight = [ weight{L}(:,1:alistart) updated_region weight{L}(:,(aliend+1):end) ] ;
+                else
+                    [ ~, updated_weight ] = DTWaverage( weight{L}, syllab(s).(fieldnam), 1, H, ce, fe ) ;
+                end
+                if indels
+                    updated_weight = updated_weight(:, updated_weight(5,:)>0.9) ; % delete insertion
+                    for n=find(updated_weight(5,:)>1.1)
+                        updated_weight = [ updated_weight(:,1:n) [.25; .25; .25; .25; 1] updated_weight(:,(n+1):end)] ; % insert deletion
+                        updated_weight(5,n) = 1 ; % reset persistence counter
                     end
-                    weight{L} = updated_weight ;
+                end
+                weight{L} = updated_weight;
+                if DEBUG && fe && L==BMU(s,dep,1) && ( aliend~=(original_pos+size(syllab(s).(fieldnam),2)-1) ) % aliend is index in C (start at 0)
+                    %mat2nucleo( syllab(s).(fieldnam) )
+                    %mat2nucleo( weight{L}(:,original_pos:(original_pos+size(syllab(s).(fieldnam),2)-1)) )
+                    %mat2nucleo( weight{L}(:,(aligned_pos-size(syllab(s).(fieldnam),2)+1):aligned_pos) )
+                    %mat2nucleo( updated_weight(:,original_pos:(original_pos+size(syllab(s).(fieldnam),2)-1)) )
+                end
                 %end
                 %%%%% IF PAIRED-END READS ALIGN THE PAIR TO THE SAME WEIGHT
                 if paired==1
-                    [ ~, updated_weight ] = DTWaverage( weight{L}, pairs(s).(fieldnam), 1, H, ce, fe ) ;
-                    weight{L} = updated_weight ;
+                    if localregion
+                        region = weight{L}(:,(alistartp+1):aliendp) ; % region of syllab to align read to
+                        [ ~, updated_region ] = DTWaverage( region, pairs(s).(fieldnam), 1, H, ce, fe ) ;
+                        updated_weight = [ weight{L}(:,1:alistartp) updated_region weight{L}(:,(aliendp+1):end) ] ;
+                    else
+                        [ ~, updated_weight ] = DTWaverage( weight{L}, pairs(s).(fieldnam), 1, H, ce, fe ) ;
+                    end
+                    if indels
+                        updated_weight = updated_weight(:, updated_weight(5,:)>0.9) ; % delete insertion
+                        for n=find(updated_weight(5,:)>1.1)
+                            updated_weight = [ updated_weight(:,1:n) [.25; .25; .25; .25; 1] updated_weight(:,(n+1):end)] ; % insert deletion
+                            updated_weight(5,n) = 1 ; % reset persistence counter
+                        end
+                    end
+                    weight{L} = updated_weight;
                 end
         end
         %%%%% increases nbmu 

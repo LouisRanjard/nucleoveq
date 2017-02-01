@@ -1,4 +1,4 @@
-function [ treepath, aligned_pos ] = findBMU(seqvect, tree, weight, ce, fe, mode)
+function [ treepath, aliend ] = findBMU(seqvect, tree, weight, ce, fe, mode)
 % find Best Matching Unit, starting at root of tree and 
 % if mode="full" then return the full path with scores
 % else only return the BMU tip id and score
@@ -23,7 +23,7 @@ function [ treepath, aligned_pos ] = findBMU(seqvect, tree, weight, ce, fe, mode
             dep = dep + 1 ;
             scor = zeros(1,max(leaves))*nan ; % initialise to NaN because the distance to the root weight is not calculated and unknown
             for L=leaves
-                [ scor(L), ~, aligned_pos ] = DTWaverage( weight{L}, seqvect, 1, 0, ce, fe ) ; % coefficient alignment
+                [ scor(L), ~, aliend ] = DTWaverage( weight{L}, seqvect, 1, 0, ce, fe ) ; % coefficient alignment
             end
             treepath(dep,2) = min(scor(leaves)) ;
             %fprintf(1,'%f\n',BMU(s,dep,2)) ;
@@ -34,7 +34,7 @@ function [ treepath, aligned_pos ] = findBMU(seqvect, tree, weight, ce, fe, mode
             leaves = find(tree==treepath(1,1)) ;
             scor = zeros(1,max(leaves))*nan ; % initialise to NaN because the distance to the root weight is not calculated and unknown
             for L=leaves
-                [ scor(L), ~, aligned_pos ] = DTWaverage( weight{L}, seqvect, 1, 0, ce, fe ) ; % coefficient alignment
+                [ scor(L), ~, aliend ] = DTWaverage( weight{L}, seqvect, 1, 0, ce, fe ) ; % coefficient alignment
             end
             treepath(1,2) = min(scor(leaves)) ;
             treepath(1,1) = datasample( find(scor==min(scor(leaves))) ,1 ) ; % find best match (Best Matching Unit), minimum distance
