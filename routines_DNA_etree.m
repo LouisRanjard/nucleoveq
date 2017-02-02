@@ -1871,3 +1871,103 @@ reference.Sequence = mat2nucleo(reference.seqvect) ;
 % write down the reconstructed fasta sequences and call BEAST
 weight2fasta(tree,weight,['./S10_reconstructed_' num2str(setsize) '_pe_fuzz_indels.fa']);
 % crashed because shannonEntropy_s() cannot deal with haplotypes of different lengths
+
+
+%% check how often reads map to their original haplotype out of all of them
+cd '~/Documents/Projects/ShortReads/test_nucleoveq' ;
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+fname='1PopDNA_40_1200_5k_17Jan2017_162030';
+truefasta=['./' fname '.haplo.fasta'];
+filefq_err=['./' fname '.err.combined.fq'];
+filefq=['./' fname '.combined.fq'];
+# input sequence files and encode
+true_seq = fastaread(truefasta);
+for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+% input reads
+reads=fastqread(filefq);
+read2true=zeros(numel(reads),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+for m=1:numel(reads)
+  %quali = qual2accu(reads(m).Quality,33) ; % encode the quality into the read vectors
+  %reads(m).seqvect=nucleo2mat(reads(m).Sequence,quali) ;
+  reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+  read2true(m)=str2double(reads(m).Header(3:strfind(reads(m).Header,'-')-1));
+end
+reads_err=fastqread(filefq_err);
+read2true_err=zeros(numel(reads_err),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+for m=1:numel(reads_err)
+  %quali = qual2accu(reads(m).Quality,33) ; % encode the quality into the read vectors
+  %reads(m).seqvect=nucleo2mat(reads(m).Sequence,quali) ;
+  reads_err(m).seqvect=nucleo2mat(reads_err(m).Sequence) ;
+  read2true_err(m)=str2double(reads_err(m).Header(3:strfind(reads_err(m).Header,'-')-1));
+end
+% find the best matching haplotype for each read
+BMUr = zeros(numel(reads),2) ;
+rpositionr = zeros(numel(reads),2) ;
+for r=1:numel(reads)
+  d=Inf;
+  for h=1:numel(true_seq)
+    [ dist, ~, aligned_pos ] = DTWaverage( true_seq(h).seqvect, reads(r).seqvect, 1, 0.5, 0, 1 ) ;
+    if dist<d
+      d=dist;
+      rpositionr(r) = aligned_pos ;
+      BMUr(r,:) = [h dist] ;
+    end
+  end
+end
+BMUr_err = zeros(numel(reads),2) ;
+rpositionr_err = zeros(numel(reads),2) ;
+for r=1:numel(reads_err)
+  d=Inf;
+  for h=1:numel(true_seq)
+    [ dist, ~, aligned_pos ] = DTWaverage( true_seq(h).seqvect, reads_err(r).seqvect, 1, 0.5, 0, 1 ) ;
+    if dist<d
+      d=dist;
+      rpositionr_err(r) = aligned_pos ;
+      BMUr_err(r,:) = [h dist] ;
+    end
+  end
+end
+% print percentage of reads that fell on their original haplotype
+fprintf(1,'%.2f\n',sum(read2true==BMUr(:,1))/length(read2true));
+tmp=find(read2true~=BMUr(:,1) & BMUr(:,2)>0); length(tmp); % 0: all error free reads align to their original haplotype
+tmpr=[];
+for r=1:numel(reads_err) % check if distance is same between BMU and original haplotype
+  if ( read2true_err(r)~=BMUr_err(r,1) && BMUr_err(r,2)<DTWaverage(true_seq(read2true_err(r)).seqvect,reads_err(r).seqvect,1,0.5,0,1) )
+    tmpr=[tmpr r]; 
+  end
+end
+length(tmpr) % 4032 misaligned reads and 4477 with errors encoded as probabilities in the reads
+
+% with errors reads being trimmed
+% cat 1PopDNA_40_1200_5k_17Jan2017_162030.paired1.tr.bb.fq 1PopDNA_40_1200_5k_17Jan2017_162030.paired2.tr.bb.fq >1PopDNA_40_1200_5k_17Jan2017_162030.tr.bb.combined.fq
+filefq=['./' fname '.tr.bb.combined.fq'];
+reads=fastqread(filefq);
+read2true=zeros(numel(reads),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+for m=1:numel(reads)
+  %quali = qual2accu(reads(m).Quality,33) ; % encode the quality into the read vectors
+  %reads(m).seqvect=nucleo2mat(reads(m).Sequence,quali) ;
+  reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+  read2true(m)=str2double(reads(m).Header(3:strfind(reads(m).Header,'-')-1));
+end
+% find the best matching haplotype for each read
+BMUr = zeros(numel(reads),2) ;
+rpositionr = zeros(numel(reads),2) ;
+for r=1:numel(reads)
+  d=Inf;
+  for h=1:numel(true_seq)
+    [ dist, ~, aligned_pos ] = DTWaverage( true_seq(h).seqvect, reads(r).seqvect, 1, 0.5, 0, 1 ) ;
+    if dist<d
+      d=dist;
+      rpositionr(r) = aligned_pos ;
+      BMUr(r,:) = [h dist] ;
+    end
+  end
+end
+tmpt=[];
+for r=1:numel(reads_err) % check if distance is same between BMU and original haplotype
+  if ( read2true_err(r)~=BMUr_err(r,1) && BMUr_err(r,2)<DTWaverage(true_seq(read2true_err(r)).seqvect,reads_err(r).seqvect,1,0.5,0,1) )
+    tmpt=[tmpt r]; 
+  end
+end
+length(tmpt)
+

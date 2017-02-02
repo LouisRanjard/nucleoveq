@@ -329,12 +329,16 @@ for e=1:epoch % each epoch
 %         end
         %%%%% UPDATE the tree except the root in the neighbourhood of the Best Matching Unit by pulling them closer to the input matrix
         % first update the BMU and save the positions where the read align in reference
-        [ ~, updated_weight, aliend, alistart ] = DTWaverage( weight{BMU(s,1)}, syllab(s).(fieldnam), 1, 1-Ftime, ce, fe ) ;
-        weight{BMU(s,1)} = updated_weight ;
-        if paired==1
-            [ ~, updated_weight, aliendp, alistartp ] = DTWaverage( weight{BMU(s,1)}, pairs(s).(fieldnam), 1, 1-Ftime, ce, fe ) ;
-            weight{BMU(s,1)} = updated_weight ;
-        end
+	if fe
+		[ ~, updated_weight, aliend, alistart ] = DTWaverage( weight{BMU(s,1)}, syllab(s).(fieldnam), 1, Ftime, ce, fe ) ;
+		weight{BMU(s,1)} = updated_weight ;
+		if paired==1
+		    [ ~, updated_weight, aliendp, alistartp ] = DTWaverage( weight{BMU(s,1)}, pairs(s).(fieldnam), 1, Ftime, ce, fe ) ;
+		    weight{BMU(s,1)} = updated_weight ;
+		end
+	else
+		[ ~, updated_weight, aliend, alistart ] = DTWaverage( weight{BMU(s,1)}, syllab(s).(fieldnam), 1, 1-Ftime, ce, fe ) ;
+	end
         % H is the weight for the first matrix sent to DTWaverage (weight{L}), 
         % hence it needs to increase with distance from BMU (Edist) ???BUG???
         for L=2:numel(tree)
