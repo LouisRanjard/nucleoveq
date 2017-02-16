@@ -1,14 +1,14 @@
 function [ nucleoseq ] = mat2nucleo(matseq)
 % convert nucleotide vector sequence to fasta
 
-    nucleoseq = repmat(char(0),1,length(matseq));
-    for nt=1:length(matseq)
+    nucleoseq = repmat(char(0),1,size(matseq,2));
+    for nt=1:size(matseq,2)
         %[~, nucleo] = max(matseq(1:4,nt)) ;
         nucleo = find(matseq(1:4,nt)==max(matseq(1:4,nt))) ;
         if numel(nucleo)>1
             nucleoseq(nt) = 'N' ;
         else
-            switch nucleo ;
+            switch nucleo
                 case 1
                     nucleoseq(nt) = 'A' ;
                 case 2
