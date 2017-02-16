@@ -1,6 +1,6 @@
 function [ weight_seq ] = weight2fasta(treeH,weightH,writef)
 % generate fasta sequences from weight sequences
-% write them to fasta file if write==1
+% write them to fasta file if writef==1
 %
 % treeH = evolving classification tree (ETDTWrec) 
 % weightH = weight matrices

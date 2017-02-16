@@ -330,10 +330,10 @@ for e=1:epoch % each epoch
         %%%%% UPDATE the tree except the root in the neighbourhood of the Best Matching Unit by pulling them closer to the input matrix
         % first update the BMU and save the positions where the read align in reference
 	if fe
-		[ ~, updated_weight, aliend, alistart ] = DTWaverage( weight{BMU(s,1)}, syllab(s).(fieldnam), 1, Ftime, ce, fe ) ;
+		[ ~, updated_weight, aliend, alistart ] = DTWaverage( weight{BMU(s,1)}, syllab(s).(fieldnam), 1, 1-Ftime, ce, fe ) ;
 		weight{BMU(s,1)} = updated_weight ;
 		if paired==1
-		    [ ~, updated_weight, aliendp, alistartp ] = DTWaverage( weight{BMU(s,1)}, pairs(s).(fieldnam), 1, Ftime, ce, fe ) ;
+		    [ ~, updated_weight, aliendp, alistartp ] = DTWaverage( weight{BMU(s,1)}, pairs(s).(fieldnam), 1, 1-Ftime, ce, fe ) ;
 		    weight{BMU(s,1)} = updated_weight ;
 		end
 	else
@@ -356,7 +356,7 @@ for e=1:epoch % each epoch
                 end
                 %Fdist = exp( (-Edist^2)/(2*(NeSt*exp(-e/(epoch*0.5)))^2) ) ; % old bug
                 Fdist = exp( (-Edist^2)/(2*(NeSt)^2) ) ;
-                H = Ftime*Fdist ; % Learning Rate x Tree Distance
+                H = (1-Ftime)*Fdist ; % Learning Rate x Tree Distance
                 if fe
                     H = 1 - H ;
                 end

@@ -66,6 +66,7 @@ if (fe && size(mat1,1)~=5 && size(mat1,1)~=4)
 end
 
 %%%%%%%%%%%%%% CALL THE C FUNCTION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%fprintf(1,'%.4f\n',q);
 %%% need to be compiled first: mex GCC=/usr/bin/gcc-4.7 COPTIMFLAGS=-O3 [path]/DTWave.c
 [dist, mat4, refend, refstart] = DTWave(mat1,mat2,cow,q,ce,fe);
 

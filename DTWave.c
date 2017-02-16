@@ -350,11 +350,15 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
 
     i = numcols;
     j = numrows;
+    
+    /* debug variables
+    int db_n=0; */
 
     /* trace back the alignment and implement the average vector sequence */
     while ( i>0 || j>0 ) {
        *(t+l) = j;
        /*printf("i=%d,j=%d,l=%d,*(t+l)=%d\n",i,j,l,*(t+l));*/
+       /*db_n=0;*/
        temp = (int)(louiround(*(t+l)));
        if ( temp>maxt ) { maxt=temp; } 
        switch ( (int) *(traceb+((numrows+1)*(i))+(j)) ) {
@@ -362,10 +366,10 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
                for (n=0;n<numv2;n++) { 
                    *(mat4+n+(numv1*l)) = (*(mat1+n+(numv1*(j-1)))); }
                if (j<numrows) { /* we are inside the alignment to reference (not in the free ends) */
-                   *(mat4+n+(numv1*l)) = *(mat1+n+(numv1*(j-1))) + (1-weight) ;/*printf("ins");*/
-                   /*if ( *(mat4+n+(numv1*l))>1.5 ) {
+                   *(mat4+n+(numv1*l)) = *(mat1+n+(numv1*(j-1))) + (1-weight) ;/**/printf("\nins");
+                   /*if ( *(mat4+n+(numv1*l))>1.1 ) {*/
                        n_ins++;
-                   }*/
+                   /*}*/
                }else{
                    *(mat4+n+(numv1*l)) = *(mat1+n+(numv1*(j-1)));
                }
@@ -377,11 +381,18 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
                for (n=0;n<numv2;n++) { 
                     *(mat4+n+(numv1*l)) = weight*(*(mat1+n+(numv1*(j-1)))) + (1-weight)*(*(mat2+n+(numv2*(i-1)))); 
                     /* *(mat4+n+(numv1*l)) = roundf(*(mat4+n+(numv1*l)) * 10000) / 10000 ; */
-                    /*vsum+=*(mat4+n+(numv1*l));*/
+                    /*vsum+=*(mat4+n+(numv1*l)); */
+                    /*if ( *(mat1+n+(numv1*(j-1))) != *(mat2+n+(numv2*(i-1))) ) {db_n=1;}*/
                }
                /*if ( (round(vsum*10000)/10000)!=1 ) printf("%.16f\n",vsum);*/
                /*for (n=0;n<numv2;n++) {  add a normlisation step to ensure that the sum of the frequency vector sum to 1
                     *(mat4+n+(numv1*l)) = *(mat4+n+(numv1*l))/vsum; } */
+               /* print alignment */
+               /*if (db_n>0){
+                   printf(" %d",j);
+                   printf("\n%d  1\t  2\t  A\n",j);
+                   for (n=0;n<numv2;n++) {printf("%.4f\t%.4f\t%.4f\n",*(mat1+n+(numv1*(j-1))),*(mat2+n+(numv2*(i-1))),*(mat4+n+(numv1*l)));}
+               }*/
                /* persistence vector */
                *(mat4+n+(numv1*l)) = *(mat1+n+(numv1*(j-1)));
                i--;
@@ -391,10 +402,10 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
                for (n=0;n<numv2;n++) { 
                    *(mat4+n+(numv1*l)) = (*(mat1+n+(numv1*(j-1)))); }
                if (i<numcols && i>0) { /* we are inside the alignment to reference (not in the free ends) */
-                   *(mat4+n+(numv1*l)) = *(mat1+n+(numv1*(j-1))) - (1-weight) ;/*printf("del");*/
-                   /*if ( *(mat4+n+(numv1*l))<0.5 ) {
+                   *(mat4+n+(numv1*l)) = *(mat1+n+(numv1*(j-1))) - (1-weight) ;/**/printf("\ndel");
+                   /*if ( *(mat4+n+(numv1*l))<0.9 ) {*/
                        n_del++;
-                   }*/
+                   /*}*/
                }else {
                    *(mat4+n+(numv1*l)) = *(mat1+n+(numv1*(j-1)));
                }
@@ -408,8 +419,9 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
        /*printf("l=%d t=%d |",l,*(t+l));for (n=0;n<numv1;n++) { printf("%f ",l,*(mat4+n+(numv1*l))); } printf("|\n");*/
        l++;
     }
-    /*printf("\nnumcols=%i,numrows=%i,numv1=%i,numv2=%i,maxt=%i,l=%i,n_del=%i,n_ins=%i,refstart=%f\n",numcols,numrows,numv1,numv2,maxt,l,n_del,n_ins,*refstart);*/
-    /*printf("t:\n"); for ( it=0 ; it<=maxt ; it++ ) { printf("%d ",*(t+it)); } printf("\n");*/
+    /*printf("\n");*/
+    /*printf("\nnumcols=%i(%i),numrows=%i(%i),numv1=%i,numv2=%i,maxt=%i,l=%i,n_del=%i,n_ins=%i,refstart=%f\n",numcols,i,numrows,j,numv1,numv2,maxt,l,n_del,n_ins,*refstart);*/
+    /*PROBLEM HERE?:printf("t:\n"); for ( it=0 ; it<=maxt ; it++ ) { printf("%d ",*(t+it)); } printf("\n");*/
     
     /* compute average with correct time direction and number of time points */
     /* mata = (double *)mxMalloc(maxt*numv1*sizeof(double)) ;*/
@@ -545,7 +557,7 @@ void vecdist(double *d, double *mat1, double *mat2, double *indelc, int numrows,
     }
     
     /* hard code the cost as twice the mismatch of fully defined base position (e.g. 2*d([1 0 0 0],[0 1 0 0]) )*/
-    *indelc = 2 ;
+    *indelc = 200 ;
     return ;
 }
 
@@ -576,6 +588,12 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
         /*if (numcols>numrows) {
             mexErrMsgIdAndTxt("DTWave:mexFunction","Matrix 2 must be shorter than matrix 1");
         }*/
+        if (numv1<5 || numv1>5) {
+            mexErrMsgIdAndTxt("DTWave:mexFunction","Reference matrix dimension error (numv1)");
+        }
+        if (numv2<4 || numv2>4) {
+            mexErrMsgIdAndTxt("DTWave:mexFunction","Matrix dimension error (numv2)");
+        }
         if (ce) {
             mexErrMsgIdAndTxt("DTWave:mexFunction","Free ends alignment is not implemented with compression/expansion yet");
         }
