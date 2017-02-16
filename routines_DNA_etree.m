@@ -1728,7 +1728,7 @@ weight2fasta(tree,weight,['./S10_reconstructed_' num2str(setsize) '.fa']);
 % not very good, do not normalize? use pariedend info? increase coverage? increase fuzzyness (neighbrohood strength)?...
 
 
-%% Use the pairend-end reads information
+%% Use the paired-end reads information
 % force the two pairs to be aligned to the same weight matrix
 addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
 cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10' ;
@@ -1880,7 +1880,7 @@ fname='1PopDNA_40_1200_5k_17Jan2017_162030';
 truefasta=['./' fname '.haplo.fasta'];
 filefq_err=['./' fname '.err.combined.fq'];
 filefq=['./' fname '.combined.fq'];
-# input sequence files and encode
+% input sequence files and encode
 true_seq = fastaread(truefasta);
 for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
 % input reads
@@ -1971,3 +1971,167 @@ for r=1:numel(reads_err) % check if distance is same between BMU and original ha
 end
 length(tmpt)
 
+
+%% Assemble kangaroo pool using updated weight calculation
+% force the two pairs to be aligned to the same weight matrix
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10' ;
+filefq='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/NormalizedErrorCorrected10_S10_L001_R_001.fastq';
+reads=fastqread(filefq);
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+end
+reads1=reads(1:2:numel(reads));
+reads2=reads(2:2:numel(reads));
+% reads1=fastqread('/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/10_S10_L001_R1_001.fastq');
+% subs = randsample(length(reads1),5000) ; % subsample ~1% to reduce coverage
+% reads1=reads1(subs);
+% for m=1:numel(reads1)
+%     reads1(m).seqvect=nucleo2mat(reads1(m).Sequence) ;
+% end
+% reads2=fastqread('/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/10_S10_L001_R2_001.fastq');
+% reads2=reads2(subs);
+% for m=1:numel(reads2)
+%     reads2(m).seqvect=nucleo2mat(reads2(m).Sequence) ;
+% end
+setsize=3 ;
+numw=setsize ; % number of weight matrices to project the reads on
+%reference=fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/Macropus_giganteus_mt.fasta');
+ref_amplicons=fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/EasternGrey_NC027424_Amplicons.fasta') ;
+reference = ref_amplicons(1) ; % sample 10 is Amplicon 1
+reference.seqvect = nucleo2mat(reference.Sequence) ;
+% root weight initialisation: align all reads once to the reference to create initial weight
+    N=numel(reads1)+numel(reads2);
+    rlen=cellfun(@(x) length(x), {reads1(:).Sequence});
+    Lr=sum(rlen)/length(rlen); % average length of reads
+    LR=length(reference.Sequence);
+    cover1=(N*Lr)/LR; % average coverage of the reference matrix
+    w1 = 1-(1/cover1) ;
+    cover2=cover1/numw; % average coverage of each weight matrix
+    w2 = 1-(1/cover2) ;
+rindex = randperm(numel(reads1)) ;
+reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+BMUr = zeros(numel(reads1),2) ;
+rpositionr = zeros(numel(reads1),1) ;
+for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+    [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, reads1(r).seqvect, 1, w1, 0, 1 ) ;
+    rpositionr(r) = aligned_pos ;
+    BMUr(r,:) = [1 dist] ;
+    [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, reads2(r).seqvect, 1, w1, 0, 1 ) ;
+end
+reference.Sequence = mat2nucleo(reference.seqvect) ;
+[ ~, reference.varcov ] = wcoverage(reference.seqvect(1:4,:),size(reads1(1).seqvect,2),rpositionr,false) ;
+[reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+[~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
+[tree, weight, BMU, ~, ~, ~] = ETDTWrec({reads1, reads2},1,[w2 w2],1,[numw numw],numel(reads1),0.95,'seqvect',[],0,0,1,reference,3,I') ; % copy weight trick
+[numhits,weightid]=hist(BMU(:,1),unique(BMU(:,1))); % get the number of hits on each weight
+% write down the reconstructed fasta sequences and call BEAST
+% fortify once
+% sindex = randperm(numel(reads1)) ;
+% for s=sindex
+%     [ ~, weight{BMU(s,1)} ] = DTWaverage( weight{BMU(s,1)}, reads1(s).seqvect, 1, w1, 0, 1 ) ;
+%     [ ~, weight{BMU(s,1)} ] = DTWaverage( weight{BMU(s,1)}, reads2(s).seqvect, 1, w1, 0, 1 ) ;
+% end
+ref.Sequence=reference.Sequence;ref.Header='weightZERO';ref.seqvect=reference.seqvect;
+ref0=ref_amplicons(1); ref0.Header='NC_027424'; ref0.seqvect=[.25; .25; .25; .25; 1];
+seqalignviewer(multialign([weight2fasta(tree,weight) ref ref0]));
+weight2fasta(tree,weight,'./S10_reconstructed_correctedreads_pe_fuzz_neww_fort.fa');
+% add step to sort out INDELS and rerun training by realigning each set of read to its BMU
+for w = 2:numw
+    weight{w} = weight{w}(:, weight{w}(5,:)>0.9) ; % delete insertion
+    for n=find(weight{w}(5,:)>1.1)
+        weight{w} = [ weight{w}(:,1:n) [.25; .25; .25; .25; 1] weight{w}(:,(n+1):end)] ; % insert deletion
+        weight{w}(5,n) = 1 ; % reset persistence counter
+    end
+end
+
+
+%% Try assembling one sample (KA1) only, with error correction
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample01' ;
+filefq='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample01/ErrorCorrected1_S1_L001_R_001.fastq';
+reads=fastqread(filefq);
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+end
+reads=reads(1:5000); % subsample?
+reads1=reads(1:2:numel(reads));
+reads2=reads(2:2:numel(reads));
+ref_amplicons=fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/EasternGrey_NC027424_Amplicons.fasta') ;
+reference = ref_amplicons(1) ; % sample 01 is Amplicon 1
+reference.seqvect = nucleo2mat(reference.Sequence) ;
+reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+ref0=reference;
+% root weight initialisation: align all reads once to the reference to create initial weight
+N=numel(reads1)+numel(reads2);
+rlen=cellfun(@(x) length(x), {reads1(:).Sequence});
+Lr=sum(rlen)/length(rlen); % average length of reads
+LR=length(reference.Sequence);
+cover1=(N*Lr)/LR; % average coverage of the reference matrix
+w1 = 1-(1/cover1) ;
+rindex = randperm(numel(reads1)) ;
+alpos = zeros(2,numel(reads1)+numel(reads2)) ;
+for r=rindex % weight w must be enough to pull a position toward a different nucleotide
+%for r=rindex(1:10) % weight w must be enough to pull a position toward a different nucleotide
+    [ dist, reference.seqvect, align_end ] = DTWaverage( reference.seqvect, reads1(r).seqvect, 1, w1, 0, 1 ) ;
+    alpos(:,r) = [dist align_end] ;
+    [ dist, reference.seqvect, align_end ] = DTWaverage( reference.seqvect, reads2(r).seqvect, 1, w1, 0, 1 ) ;
+    alpos(:,r+numel(reads1)) = [dist align_end] ;
+end
+reference.Sequence = mat2nucleo(reference.seqvect) ;
+reference.Header='Reconstructed';
+%[~,ali] = nwalign(reference,ref0);showalignment(ali);
+true = fastaread('/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/geneious/amplicons.fasta','TrimHeaders','true') ;
+trueKA1 = true(1); trueKA1.Header='KA1'; trueKA1.seqvect=[.25; .25; .25; .25; 1];
+ref0=ref_amplicons(1); ref0.Header='NC_027424'; ref0.seqvect=[.25; .25; .25; .25; 1];
+seqalignviewer(multialign([ref0 reference trueKA1]));
+
+
+%% CONTROL: do a test on the alignment position of simulated error free reads after update on vector distance score
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+ref_amplicons = fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/EasternGrey_NC027424_Amplicons.fasta') ;
+reference = ref_amplicons(1) ; % sample 10 is Amplicon 1
+reference.seqvect = nucleo2mat(reference.Sequence) ;
+reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+ref0=reference;
+% Simulated reads (with errors)
+reads = sim_reads(ref0,150,30,0.5); % Illumina has 0.1-0.5 errors
+% mutate the reference
+reference.seqvect = mutatematseq(reference.seqvect,0.1,0.05) ;
+reference.Sequence = mat2nucleo(reference.seqvect) ;
+ref1=reference;%reference=ref1;
+% align the reads
+% compute weight
+N=numel(reads);
+rlen=cellfun(@(x) length(x), {reads(:).Sequence});
+Lr=sum(rlen)/length(rlen); % average length of reads
+LR=length(reference.Sequence);
+cover1=(N*Lr)/LR; % average coverage of the reference matrix
+w1 = 1-(1/cover1) ;
+alpos = zeros(3,numel(reads));
+for r=1:numel(reads)
+    [ dist, reference.seqvect, ~, align_start ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w1, 0, 1 ) ;
+    %[ dist, reference.seqvect, align_end, align_start ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w1, 0, 1 ) ;
+    alpos(1,r) = dist;
+    alpos(2,r) = align_start;
+    alpos(3,r) = str2double(reads(r).Header(strfind(reads(r).Header,'_pos')+4:end));
+end
+reference.Sequence=mat2nucleo(reference.seqvect);
+figure; subplot(2,1,1); hist(alpos(1,:));
+subplot(2,1,2); scatter(alpos(2,:),alpos(3,:));
+hold on; plot(alpos(3,:),alpos(3,:)); hold off;
+[~,ali] = nwalign(reference,ref0); showalignment(ali);
+[~,ali] = nwalign(reference,ref1); showalignment(ali);
+% Average sequence test
+A.seqvect=reference.seqvect(:,1:20);
+A.Sequence=mat2nucleo(A.seqvect);
+A.Header='ampli1_1to20';
+B.seqvect=A.seqvect(1:4,5:15);
+B.Sequence=mat2nucleo(B.seqvect);
+B.Header='originalpos_20';
+[ a,b,ae,as ] = DTWaverage( A.seqvect, B.seqvect, 1, 0.5, 0, 1 ) ;for r=rindex(1:10) % weight w must be enough to pull a position toward a different nucleotide
+    [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, reads1(r).seqvect, 1, w1, 0, 1 ) ;
+    rpositionr(r) = aligned_pos ;
+    BMUr(r,:) = [1 dist] ;
+    [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, reads2(r).seqvect, 1, w1, 0, 1 ) ;
+end
