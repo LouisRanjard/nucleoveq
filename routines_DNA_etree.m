@@ -2054,54 +2054,60 @@ reads=fastqread(filefq);
 for m=1:numel(reads)
     reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
 end
-reads=reads(1:5000); % subsample?
-reads1=reads(1:2:numel(reads));
-reads2=reads(2:2:numel(reads));
+reads=reads(datasample(1:numel(reads),3094,'Replace',false)); % subsample to get 100x coverage 4640*100/150=3093.33
 ref_amplicons=fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/EasternGrey_NC027424_Amplicons.fasta') ;
 reference = ref_amplicons(1) ; % sample 01 is Amplicon 1
 reference.seqvect = nucleo2mat(reference.Sequence) ;
 reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
-ref0=reference;
+ref0=reference;%reference=ref0;
 % root weight initialisation: align all reads once to the reference to create initial weight
-N=numel(reads1)+numel(reads2);
-rlen=cellfun(@(x) length(x), {reads1(:).Sequence});
+N=numel(reads);
+rlen=cellfun(@(x) length(x), {reads(:).Sequence});
 Lr=sum(rlen)/length(rlen); % average length of reads
 LR=length(reference.Sequence);
 cover1=(N*Lr)/LR; % average coverage of the reference matrix
 w1 = 1-(1/cover1) ;
-rindex = randperm(numel(reads1)) ;
-alpos = zeros(2,numel(reads1)+numel(reads2)) ;
+rindex = randperm(numel(reads)) ;
+alpos = zeros(2,numel(reads)) ;
 for r=rindex % weight w must be enough to pull a position toward a different nucleotide
-%for r=rindex(1:10) % weight w must be enough to pull a position toward a different nucleotide
-    [ dist, reference.seqvect, align_end ] = DTWaverage( reference.seqvect, reads1(r).seqvect, 1, w1, 0, 1 ) ;
-    alpos(:,r) = [dist align_end] ;
-    [ dist, reference.seqvect, align_end ] = DTWaverage( reference.seqvect, reads2(r).seqvect, 1, w1, 0, 1 ) ;
-    alpos(:,r+numel(reads1)) = [dist align_end] ;
+    [ distF, seqvectF, align_endF ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w1, 0, 1 ) ;
+    [ distR, seqvectR, align_endR ] = DTWaverage( reference.seqvect, reversecomplement(reads(r).seqvect), 1, w1, 0, 1 ) ;
+    if distF<distR
+        reference.seqvect = seqvectF ;
+        alpos(:,r) = [distF align_endF] ;
+    else 
+        reference.seqvect = seqvectR ;
+        alpos(:,r) = [distR align_endR] ;
+    end
 end
 reference.Sequence = mat2nucleo(reference.seqvect) ;
 reference.Header='Reconstructed';
-%[~,ali] = nwalign(reference,ref0);showalignment(ali);
+[~,ali] = nwalign(reference,ref0);showalignment(ali);
 true = fastaread('/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/geneious/amplicons.fasta','TrimHeaders','true') ;
-trueKA1 = true(1); trueKA1.Header='KA1'; trueKA1.seqvect=[.25; .25; .25; .25; 1];
-ref0=ref_amplicons(1); ref0.Header='NC_027424'; ref0.seqvect=[.25; .25; .25; .25; 1];
-seqalignviewer(multialign([ref0 reference trueKA1]));
-
+geneiousKA1 = true(1); geneiousKA1.Header='KA1_{geneious}'; geneiousKA1.seqvect=[.25; .25; .25; .25; 1];
+Ampli1=ref_amplicons(1); Ampli1.Header='NC027424'; Ampli1.seqvect=[.25; .25; .25; .25; 1];
+seqalignviewer(multialign([ geneiousKA1 reference Ampli1 ]));
 
 %% CONTROL: do a test on the alignment position of simulated error free reads after update on vector distance score
 addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
 ref_amplicons = fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/EasternGrey_NC027424_Amplicons.fasta') ;
-reference = ref_amplicons(1) ; % sample 10 is Amplicon 1
+reference = ref_amplicons(1) ; % sample 1 is Amplicon 1
+reference.Header='NC027424';
+reference.Sequence=reference.Sequence;
+%reference.Sequence=reference.Sequence(1:300);
 reference.seqvect = nucleo2mat(reference.Sequence) ;
 reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
 ref0=reference;
 % Simulated reads (with errors)
-reads = sim_reads(ref0,150,30,0.5); % Illumina has 0.1-0.5 errors
+reads = sim_reads(ref0,150,100,0.5); % Illumina has 0.1-0.5 errors
 % mutate the reference
-reference.seqvect = mutatematseq(reference.seqvect,0.1,0.05) ;
+reference.seqvect = mutatematseq(reference.seqvect,0.1,0.1) ;
 reference.Sequence = mat2nucleo(reference.seqvect) ;
+reference.Header='reconstructed';
+%w1=0.6;t=reference.seqvect;[~,t]=DTWaverage( t, reads(2).seqvect, 1, w1, 0, 1 );t(:,200:215) % TEST INSERTIONS
 ref1=reference;%reference=ref1;
+ref1.Header='NC027424_{mutated}';
 % align the reads
-% compute weight
 N=numel(reads);
 rlen=cellfun(@(x) length(x), {reads(:).Sequence});
 Lr=sum(rlen)/length(rlen); % average length of reads
@@ -2110,8 +2116,7 @@ cover1=(N*Lr)/LR; % average coverage of the reference matrix
 w1 = 1-(1/cover1) ;
 alpos = zeros(3,numel(reads));
 for r=1:numel(reads)
-    [ dist, reference.seqvect, ~, align_start ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w1, 0, 1 ) ;
-    %[ dist, reference.seqvect, align_end, align_start ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w1, 0, 1 ) ;
+    [ dist, reference.seqvect, align_end, align_start ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w1, 0, 1 ) ;
     alpos(1,r) = dist;
     alpos(2,r) = align_start;
     alpos(3,r) = str2double(reads(r).Header(strfind(reads(r).Header,'_pos')+4:end));
@@ -2120,18 +2125,20 @@ reference.Sequence=mat2nucleo(reference.seqvect);
 figure; subplot(2,1,1); hist(alpos(1,:));
 subplot(2,1,2); scatter(alpos(2,:),alpos(3,:));
 hold on; plot(alpos(3,:),alpos(3,:)); hold off;
+seqalignviewer(multialign([ ref0 reference ref1 ]));
 [~,ali] = nwalign(reference,ref0); showalignment(ali);
 [~,ali] = nwalign(reference,ref1); showalignment(ali);
-% Average sequence test
-A.seqvect=reference.seqvect(:,1:20);
-A.Sequence=mat2nucleo(A.seqvect);
-A.Header='ampli1_1to20';
-B.seqvect=A.seqvect(1:4,5:15);
-B.Sequence=mat2nucleo(B.seqvect);
-B.Header='originalpos_20';
-[ a,b,ae,as ] = DTWaverage( A.seqvect, B.seqvect, 1, 0.5, 0, 1 ) ;for r=rindex(1:10) % weight w must be enough to pull a position toward a different nucleotide
-    [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, reads1(r).seqvect, 1, w1, 0, 1 ) ;
-    rpositionr(r) = aligned_pos ;
-    BMUr(r,:) = [1 dist] ;
-    [ dist, reference.seqvect, aligned_pos ] = DTWaverage( reference.seqvect, reads2(r).seqvect, 1, w1, 0, 1 ) ;
-end
+%% TEST INSERTION
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+f.Sequence='ACGTATTACATCCGTTAAAC';
+f.seqvect=[nucleo2mat(f.Sequence); ones(1,length(f.Sequence)) ] ;
+r.Sequence='ATTACATACC';
+r.seqvect=nucleo2mat(r.Sequence);
+s=f.seqvect;
+[~,s]=DTWaverage( s, r.seqvect, 1, 0.6, 0, 1 );mat2nucleo(s)
+%% TEST DELETION
+r.Sequence='ATTACTCCGT';
+r.seqvect=nucleo2mat(r.Sequence);
+s=f.seqvect;
+[~,s]=DTWaverage( s, r.seqvect, 1, 0.6, 0, 1 );mat2nucleo(s)
+
