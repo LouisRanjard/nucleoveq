@@ -12,15 +12,19 @@ function [ ] = printmat(matseq,a,b)
 %     T.Properties.VariableNames=strcat( num2cell(mat2nucleo(tmp)), P) ;
 %     disp(T);
     
-    
+    L=length(num2str(b)); % get the number of digits required
     for n=a:b
-        fprintf(1,'   <strong>%s</strong>   ',mat2nucleo(matseq(1:4,n)));
+        fprintf(1,['%0' num2str(L) 'd\t'],n);
+    end
+    fprintf(1,'\n');
+    for n=a:b
+        fprintf(1,'<strong>%s</strong>\t',mat2nucleo(matseq(1:4,n)));
     end
     fprintf(1,'\n');
     
     for m=1:length(matseq(:,1))
         for n=a:b
-            fprintf(1,'%.4f ',matseq(m,n));
+            fprintf(1,'%.4f\t',matseq(m,n));
         end
         fprintf(1,'\n');
     end

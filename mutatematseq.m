@@ -25,7 +25,7 @@ function [ mutmatseq ] = mutatematseq(matseq,percent,percentindels)
     end
     
     % INDELS
-    indelpos = datasample(1:length(matseq),round(length(matseq)*percentindels),'Replace',false) ;
+    indelpos = datasample(1:(length(matseq)-1),round((length(matseq)-1)*percentindels),'Replace',false) ;
     for n=1:numel(indelpos) % each position to be mutated
         if random('unif',0,1)<0.5 % DELETION
             mutmatseq = [mutmatseq(:,1:(indelpos(n)-1)) mutmatseq(:,(indelpos(n)+1):end)] ;
