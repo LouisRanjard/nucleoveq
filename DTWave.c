@@ -344,8 +344,9 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
     int n_del=0, n_ins=0; /* count number of insertions and deletions into mat1 */
     int it; /*DEBUG*/
     int refstart_saved=0;
-    int indel_limit=0.5; /* determine how far the persistence vector needs to go before an INDEL is performed in reference */
-
+    double indel_limit; /* determine how far the persistence vector needs to go before an INDEL is performed in reference */
+    
+    indel_limit = weight/2 ; /* "/2" because it can go either up or down from 1 */
     mat4 = (double *)mxMalloc((numcols+numrows)*(numv1)*sizeof(double)) ;
     t = (int *)mxMalloc((numcols+numrows)*sizeof(int)) ; /* store position index */
 
