@@ -5,6 +5,6 @@ function [ matseqRC ] = reversecomplement(matseq)
 % T -> A
 % G -> C
 
-    matseqRC = matseq([3 4 1 2],end:-1:1) ;
+    matseqRC = matseq([3 4 1 2],end:-1:1) ;    
 
 end

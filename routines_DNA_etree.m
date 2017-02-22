@@ -2054,7 +2054,8 @@ reads=fastqread(filefq);
 for m=1:numel(reads)
     reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
 end
-reads=reads(datasample(1:numel(reads),3094,'Replace',false)); % subsample to get 100x coverage 4640*100/150=3093.33
+%reads=reads(datasample(1:numel(reads),3094,'Replace',false)); % subsample to get 100x coverage 4640*100/150=3093.33
+reads=reads(datasample(1:numel(reads),928,'Replace',false)); % subsample to get 30x coverage 4640*30/150=928
 ref_amplicons=fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/EasternGrey_NC027424_Amplicons.fasta') ;
 reference = ref_amplicons(1) ; % sample 01 is Amplicon 1
 reference.seqvect = nucleo2mat(reference.Sequence) ;
@@ -2066,7 +2067,8 @@ rlen=cellfun(@(x) length(x), {reads(:).Sequence});
 Lr=sum(rlen)/length(rlen); % average length of reads
 LR=length(reference.Sequence);
 cover1=(N*Lr)/LR; % average coverage of the reference matrix
-w1 = 1-(1/cover1) ;
+%w1 = 1-(1/cover1) ;
+w1 = nthroot(0.001,(cover1/2)-1) ;
 rindex = randperm(numel(reads)) ;
 alpos = zeros(2,numel(reads)) ;
 for r=rindex % weight w must be enough to pull a position toward a different nucleotide
@@ -2082,11 +2084,11 @@ for r=rindex % weight w must be enough to pull a position toward a different nuc
 end
 reference.Sequence = mat2nucleo(reference.seqvect) ;
 reference.Header='Reconstructed';
-[~,ali] = nwalign(reference,ref0);showalignment(ali);
 true = fastaread('/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/geneious/amplicons.fasta','TrimHeaders','true') ;
 geneiousKA1 = true(1); geneiousKA1.Header='KA1_{geneious}'; geneiousKA1.seqvect=[.25; .25; .25; .25; 1];
 Ampli1=ref_amplicons(1); Ampli1.Header='NC027424'; Ampli1.seqvect=[.25; .25; .25; .25; 1];
 seqalignviewer(multialign([ geneiousKA1 reference Ampli1 ]));
+[~,ali] = nwalign(reference,geneiousKA1);showalignment(ali);
 
 %% CONTROL: do a test on the alignment position of simulated error free reads after update on vector distance score
 addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
@@ -2113,7 +2115,8 @@ rlen=cellfun(@(x) length(x), {reads(:).Sequence});
 Lr=sum(rlen)/length(rlen); % average length of reads
 LR=length(reference.Sequence);
 cover1=(N*Lr)/LR; % average coverage of the reference matrix
-w1 = 1-(1/cover1) ;
+%w1 = 1-(1/cover1) ;
+w1 = nthroot(0.001,cover1-1) ;
 alpos = zeros(3,numel(reads));
 for r=1:numel(reads)
     [ dist, reference.seqvect, align_end, align_start ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w1, 0, 1 ) ;
@@ -2141,4 +2144,16 @@ r.Sequence='ATTACTCCGT';
 r.seqvect=nucleo2mat(r.Sequence);
 s=f.seqvect;
 [~,s]=DTWaverage( s, r.seqvect, 1, 0.6, 0, 1 );mat2nucleo(s)
-
+%% TEST WEIGHTS
+a=[1 0 0 0];
+b=[0 1 0 0];
+d=zeros(1,100);
+c=a;
+c2=zeros(1,100);
+for n=1:100
+    c=w1.*c+(1-w1).*b;
+    d(n)=sqrt(sum((c-a).^2));
+    c2(n)=c(2);
+end
+figure;plot(c2);
+figure;plot(d);title(w1);
