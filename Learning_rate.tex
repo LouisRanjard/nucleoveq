@@ -1,0 +1,32 @@
+\documentclass[12pt]{article}\usepackage[]{graphicx}\usepackage[]{color}
+
+
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+
+
+\begin{document}
+
+\section{Learning rate}
+
+The learning rate $w$ governs the strength of the vector updates.
+Considering the base $x$ of a vector from a short read aligned to a base $y$ in the reference sequence, at iteration $i$, updates are performed using the following equation
+\begin{equation}
+y_{i+1}=w*y_{i}+(1-w)*x
+\end{equation}
+
+
+\subsection{Selecting learning rate}
+The average coverage is calculated to choose the value of the learning rate as it will determine the expected number of iteration.
+Considering a value of $y=0$, we want the rate strong enough to bring it to $1$ so that substitution are fully defined at the end of the learning.
+
+In practice, we use half the average coverage to cauilcate the learning rate so that variation in the coverage is taken into account.
+To set the threshold for INDELS, half of the learning rate is used.
+
+
+\subsection{Issue}
+The order with which the reads are chosen will have an impact on the update of the vector values.
+Therefore, alternative caulcation for the update, e.g. weighted iterative mean, could be utilised.
+
+\end{document}
+
