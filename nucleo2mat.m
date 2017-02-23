@@ -16,7 +16,7 @@ if persistence==0
     matseq = zeros(4,length(nucleoseq)) ;
     for nt=1:length(nucleoseq)
         switch nucleoseq(nt)
-            case 'N'
+            case {'N','-'}
                 matseq(:,nt) = [ .25 .25 .25 .25 ];
             case 'A'
                 matseq(:,nt) = [ 1-qualiti(nt) qualiti(nt)/3 qualiti(nt)/3 qualiti(nt)/3 ];
@@ -32,7 +32,7 @@ else
     matseq = zeros(5,length(nucleoseq)) ;
     for nt=1:length(nucleoseq)
         switch nucleoseq(nt)
-            case 'N'
+            case {'N','-'}
                 matseq(:,nt) = [ .25 .25 .25 .25 1 ];
             case 'A'
                 matseq(:,nt) = [ 1-qualiti(nt) qualiti(nt)/3 qualiti(nt)/3 qualiti(nt)/3 1 ];

@@ -692,7 +692,8 @@ for e=1:epoch % each epoch
     features.MeanShannonEntropy(e) = se(e) ;
 %     features.AIC(e) = 2*numtips-2*log(1/p(e)) ;
 %     features.BIC(e) = -2*log(1/p(e))+numtips*log(numsyll) ;
-    features.AllEntropy(e) = shannonEntropy_s(weight(tips)) ;
+    %features.AllEntropy(e) = shannonEntropy_s(weight(tips)) ;
+    features.AllEntropy(e) = 0 ;
     %[features.sum_lproba_SgHR(e), features.sum_lproba_HgR(e)] = p_SHR(syllab, tree, weight, ce, fe) ;
     features.sum_lproba_SgHR(e)=0; features.sum_lproba_HgR(e)=0;
     fprintf(fileid,'\n%s/%g\t %s\t ',sprintf(['%0' num2str(length(num2str(epoch))) 'd'],e),epoch,char(datetime('now'))); % format the printing of "e" to have the same width as "epoch"
