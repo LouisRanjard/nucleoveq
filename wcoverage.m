@@ -26,7 +26,7 @@ function [wcoverage, varcov, shannonEnt ] = wcoverage(weight,readlen,rposition,p
     % coverage
     wcoverage=zeros(1,size(weight,2));
     for n=1:length(rposition)
-        for m=max([ 1 (rposition(n)-readlen+1) ]):rposition(n)
+        for m=max([ 1 (rposition(n)-readlen+1) ]):min([rposition(n) size(weight,2)]) % with deletion(s), rposition(n) could be larger than size(weight,2)
             wcoverage(m)=wcoverage(m)+1;
         end
     end

@@ -2157,3 +2157,61 @@ for n=1:100
 end
 figure;plot(c2);
 figure;plot(d);title(w1);
+
+
+%% Assemble kangaroo pool using updated weight calculation and INDELS
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10' ;
+%filefq='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/NormalizedErrorCorrected10_S10_L001_R_001.fastq';
+filefq='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/10_S10_L001_R1_001.fastq';
+reads=fastqread(filefq);
+reads=reads(datasample(1:numel(reads),18564,'Replace',false));%subsample to get 200x on average, 4641*200*3/150=18564 (i.e. 25x minimum coverage)
+for m=1:numel(reads)
+    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+end
+setsize=3 ;
+numw=setsize ; % number of weight matrices to project the reads on
+ref_amplicons=fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/EasternGrey_NC027424_Amplicons.fasta') ;
+reference = ref_amplicons(1) ; % sample 10 is Amplicon 1
+reference.seqvect = nucleo2mat(reference.Sequence) ;
+% root weight initialisation: align all reads once to the reference to create initial weight
+N=numel(reads);
+rlen=cellfun(@(x) length(x), {reads(:).Sequence});
+Lr=sum(rlen)/length(rlen); % average length of reads
+LR=length(reference.Sequence);
+cover1=(N*Lr)/LR; % average coverage of the reference matrix
+w1 = nthroot(0.001,(cover1/2)-1) ; fprintf( 1,'cover1=%.2f, w1=%.2f\n',cover1,w1 );
+cover2=cover1/numw; % average coverage of each weight matrix
+w2 = nthroot(0.001,(cover2/2)-1) ; fprintf( 1,'cover2=%.2f, w2=%.2f\n',cover2,w2 );
+rindex = randperm(numel(reads)) ;
+reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+rpositionr = zeros(numel(reads),1) ;
+rdist = zeros(numel(reads),1);
+for r=rindex
+    [ distF, seqvectF, align_endF ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w1, 0, 1 ) ;
+    RC = reversecomplement(reads(r).seqvect);
+    [ distR, seqvectR, align_endR ] = DTWaverage( reference.seqvect, RC, 1, w1, 0, 1 ) ;
+    if distF<distR
+      reference.seqvect = seqvectF ;
+      rpositionr(r) = align_endF ;
+      rdist(r) = distF;
+    else
+      reads(r).seqvect = RC ; % only keep FORWARD sequence because there is no direction check in ETDTWrec
+      reads(r).sequence = mat2nucleo(reads(r).seqvect) ;
+      reference.seqvect = seqvectR ;
+      rpositionr(r) = align_endR ;
+      rdist(r) = distR;
+    end
+end
+reference.Sequence = mat2nucleo(reference.seqvect) ;
+[ ~, reference.varcov ] = wcoverage(reference.seqvect(1:4,:),size(reads(1).seqvect,2),rpositionr,false) ;
+[reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+[~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
+[tree, weight, BMU, ~, ~, ~] = ETDTWrec(reads,1,[w2 w2],0.01,[numw numw],2*numel(reads),0.95,'seqvect',[],0,0,1,reference,3,I') ; % copy weight trick
+%[numhits,weightid]=hist(BMU(:,1),unique(BMU(:,1))); % get the number of hits on each weight
+ref.Sequence=reference.Sequence;ref.Header='weightZERO';ref.seqvect=reference.seqvect;
+ref0=ref_amplicons(1); ref0.Header='NC_027424'; ref0.seqvect=[.25; .25; .25; .25; 1];
+seqalignviewer(multialign([weight2fasta(tree,weight) ref ref0]));
+[~,ali] = nwalign(ref,ref0); showalignment(ali);
+weight2fasta(tree,weight,'./S10_reconstructed_rawreads_indels.fa');
+

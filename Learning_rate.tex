@@ -3,6 +3,7 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage[english]{babel}
+\usepackage{amsmath}
 
 
 \begin{document}
@@ -11,22 +12,86 @@
 
 The learning rate $w$ governs the strength of the vector updates.
 Considering the base $x$ of a vector from a short read aligned to a base $y$ in the reference sequence, at iteration $i$, updates are performed using the following equation
-\begin{equation}
+\begin{equation*}
 y_{i+1}=w*y_{i}+(1-w)*x
-\end{equation}
+\end{equation*}
 
 
 \subsection{Selecting learning rate}
 The average coverage is calculated to choose the value of the learning rate as it will determine the expected number of iteration.
-Considering a value of $y=0$, we want the rate strong enough to bring it to $1$ so that substitution are fully defined at the end of the learning.
+Considering a value of $y_{1}=0$, we want the rate strong enough to bring it to $1$ if the reads values $x=1$ so that substitution are fully defined at the end of the learning.
+Using the above equation in this special case,
+\begin{equation*}
+y_{2}=w*y_{1}+(1-w)*x
+\end{equation*}
+\begin{equation*}
+y_{2}=(1-w)
+\end{equation*}
 
-In practice, we use half the average coverage to cauilcate the learning rate so that variation in the coverage is taken into account.
+At the next iterations
+\begin{equation*}
+y_{3}=w*y_{2}+(1-w)*x
+\end{equation*}
+\begin{equation*}
+y_{3}=w*(1-w)+(1-w)=1-w^{2}
+\end{equation*}
+\begin{equation*}
+y_{4}=w*(1-w^{2})+(1-w)=1-w^{3}
+\end{equation*}
+
+Therefore, it can be seen that
+\begin{equation*}
+y_{i}=1-w^{i-1}
+\end{equation*}
+when $y_{1}=0$ and $x=1$.
+
+If we want $y=0.99$, $y$ cannot reach $1$ exactly, at iteration $i=100$
+\begin{equation*}
+y_{100}=0.99
+\end{equation*}
+\begin{equation*}
+1-w^{99}=0.99
+\end{equation*}
+\begin{equation*}
+w=\sqrt[0.99]{0.01}
+\end{equation*}
+
+Similarily, we want the weight to be strong enough to reach $0$ when starting at $1$.
+\begin{equation*}
+y_{i}=w^{i-1}
+\end{equation*}
+when $y_{1}=1$ and $x=0$.
+We want
+\begin{equation*}
+w^{99}=0.01
+\end{equation*}
+\begin{equation*}
+w=\sqrt[99]{0.01}
+\end{equation*}
+
+In other words, to find the weight value, one can use the following equation
+\begin{equation*}
+w=\sqrt[coverage-1]{precision}
+\end{equation*}
+wherer the $precision$ is the required approximation to $0$ and $coverage$ is the expected mean coverage.
+
+In practice, we use half the average coverage to calculate the learning rate so that variation in the coverage across the seqeunce is taken into account.
 To set the threshold for INDELS, half of the learning rate is used.
 
 
 \subsection{Issue}
 The order with which the reads are chosen will have an impact on the update of the vector values.
-Therefore, alternative caulcation for the update, e.g. weighted iterative mean, could be utilised.
+For example, when $y_{1}=0$, half of the reads are $x=0$ and half $x=1$, the final value $y_{10}$ is
+\begin{verbatim}
+>> y=0;for n=[0 0 0 0 0 1 1 1 1 1],y=y*0.9+n*0.1;end;disp(y);
+    0.4095
+>> y=0;for n=[1 1 1 1 1 0 0 0 0 0],y=y*0.9+n*0.1;end;disp(y);
+    0.2418
+>> y=0;for n=[1 0 1 0 1 0 1 0 1 0],y=y*0.9+n*0.1;end;disp(y);
+    0.3085
+\end{verbatim}
+Therefore, alternative calculation for the update, e.g. weighted iterative mean, could be utilised.
+
 
 \end{document}
 

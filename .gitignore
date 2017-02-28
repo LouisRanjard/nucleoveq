@@ -40,3 +40,6 @@
 
 # log files
 *.log
+
+# LaTex temp file
+*.aux
