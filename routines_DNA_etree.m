@@ -2111,7 +2111,7 @@ ref1=reference;%reference=ref1;
 ref1.Header='NC027424_{mutated}';
 % align the reads
 N=numel(reads);
-rlen=cellfun(@(x) length(x), {reads(:).Sequence});
+rlen=cellfun(@(x) length(x), {reads(:ls).Sequence});
 Lr=sum(rlen)/length(rlen); % average length of reads
 LR=length(reference.Sequence);
 cover1=(N*Lr)/LR; % average coverage of the reference matrix
@@ -2159,59 +2159,372 @@ figure;plot(c2);
 figure;plot(d);title(w1);
 
 
+%% test plotting weight update function for INDELS
+y=zeros(1,202);y(1)=1;for n=2:202, y(n)=y(n-1)+(1-w2); end; figure; plot(y);title('old threshold');hold on;plot(2:202,zeros(1,201)+1+w2);hold off;
+y=zeros(1,202);y(1)=1;for n=2:202, y(n)=y(n-1)-(1-w2); end; figure; plot(y);title('old threshold');hold on;plot(2:202,zeros(1,201)+1-w2);hold off;
+y=zeros(1,202);y(1)=1;for n=2:202, y(n)=y(n-1)*w2+2*(1-w2); end; figure; plot(y);hold on;plot(2:202,zeros(1,201)+1+w2);hold off;
+y=zeros(1,202);y(1)=1;for n=2:202, y(n)=y(n-1)*w2; end; figure; plot(y);hold on;plot(2:202,zeros(1,201)+1-w2);hold off;
+% try sigmoid...
+c = 100 ; % midpoint, should be half the number of epochs? or a quarter?
+k = 0.05 ; % steepness, depends on w2?
+y=zeros(1,202);y(1)=0;for n=2:202, y(n) = (1/(1+exp(-k*(n-c)))) ; end; figure; plot(y);hold on;plot(2:202,zeros(1,201)+1-w2);hold off;
+% need to know the number of hits "n" to use sigmoid function
+% 
+
+
 %% Assemble kangaroo pool using updated weight calculation and INDELS
 addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
 cd '/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10' ;
 %filefq='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/NormalizedErrorCorrected10_S10_L001_R_001.fastq';
-filefq='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/10_S10_L001_R1_001.fastq';
-reads=fastqread(filefq);
-reads=reads(datasample(1:numel(reads),18564,'Replace',false));%subsample to get 200x on average, 4641*200*3/150=18564 (i.e. 25x minimum coverage)
-for m=1:numel(reads)
-    reads(m).seqvect=nucleo2mat(reads(m).Sequence) ;
+filefq1='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/10_S10_L001_R1_001.fastq';
+filefq2='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/nucleoveq/sample10/10_S10_L001_R2_001.fastq';
+reads1=fastqread(filefq1);
+reads2=fastqread(filefq2);
+NREAD = 3750 ; % subsample to get coverage 30x on the least abundant haplotype (N*0.125*150*2)/4641=30
+idr = datasample(1:numel(reads1),NREAD,'Replace',false) ; 
+reads1=reads1(idr);
+reads2=reads2(idr); 
+for m=1:numel(reads1)
+    reads1(m).seqvect=nucleo2mat(reads1(m).Sequence) ;
+    reads2(m).seqvect=nucleo2mat(reads2(m).Sequence) ;
 end
 setsize=3 ;
 numw=setsize ; % number of weight matrices to project the reads on
 ref_amplicons=fastaread('/home/louis/Documents/Projects/Pooling3/Macropodidae/EasternGrey_NC027424_Amplicons.fasta') ;
 reference = ref_amplicons(1) ; % sample 10 is Amplicon 1
-reference.seqvect = nucleo2mat(reference.Sequence) ;
+reference.seqvect = [ nucleo2mat(reference.Sequence); ones(1,length(reference.Sequence)) ] ; % add persistence vector
 % root weight initialisation: align all reads once to the reference to create initial weight
-N=numel(reads);
-rlen=cellfun(@(x) length(x), {reads(:).Sequence});
+N=2*numel(reads1);
+rlen=cellfun(@(x) length(x), {reads1(:).Sequence reads2(:).Sequence});
 Lr=sum(rlen)/length(rlen); % average length of reads
 LR=length(reference.Sequence);
 cover1=(N*Lr)/LR; % average coverage of the reference matrix
 w1 = nthroot(0.001,(cover1/2)-1) ; fprintf( 1,'cover1=%.2f, w1=%.2f\n',cover1,w1 );
 cover2=cover1/numw; % average coverage of each weight matrix
 w2 = nthroot(0.001,(cover2/2)-1) ; fprintf( 1,'cover2=%.2f, w2=%.2f\n',cover2,w2 );
-rindex = randperm(numel(reads)) ;
-reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
-rpositionr = zeros(numel(reads),1) ;
-rdist = zeros(numel(reads),1);
+rindex = randperm(numel(reads1)) ;
+rpositionr = zeros(numel(reads1),1) ; % position of the alignment of the first read in each pair
+rdist = zeros(numel(reads1)+numel(reads2),1);
 for r=rindex
-    [ distF, seqvectF, align_endF ] = DTWaverage( reference.seqvect, reads(r).seqvect, 1, w1, 0, 1 ) ;
-    RC = reversecomplement(reads(r).seqvect);
+    % align read 1
+    [ distF, seqvectF, align_endF ] = DTWaverage( reference.seqvect, reads1(r).seqvect, 1, w1, 0, 1 ) ;
+    RC = reversecomplement(reads1(r).seqvect);
     [ distR, seqvectR, align_endR ] = DTWaverage( reference.seqvect, RC, 1, w1, 0, 1 ) ;
     if distF<distR
       reference.seqvect = seqvectF ;
       rpositionr(r) = align_endF ;
-      rdist(r) = distF;
+      rdist(r) = distF ;
     else
-      reads(r).seqvect = RC ; % only keep FORWARD sequence because there is no direction check in ETDTWrec
-      reads(r).sequence = mat2nucleo(reads(r).seqvect) ;
+      reads1(r).seqvect = RC ; % only keep FORWARD sequence because there is no direction check in ETDTWrec
+      reads1(r).Sequence = mat2nucleo(reads1(r).seqvect) ;
       reference.seqvect = seqvectR ;
       rpositionr(r) = align_endR ;
-      rdist(r) = distR;
+      rdist(r) = distR ;
+    end
+    % align read 2
+    [ distF, seqvectF, align_endF ] = DTWaverage( reference.seqvect, reads2(r).seqvect, 1, w1, 0, 1 ) ;
+    RC = reversecomplement(reads2(r).seqvect);
+    [ distR, seqvectR, align_endR ] = DTWaverage( reference.seqvect, RC, 1, w1, 0, 1 ) ;
+    if distF<distR
+      reference.seqvect = seqvectF ;
+      rdist(r+NREAD) = distF ;
+      if align_endF<rpositionr(r) % the read 2 in pair aligns first in the sequence (before read1) -> swap them
+          readtmp=reads1(r); reads1(r)=reads2(r); reads2(r)=readtmp;
+      end 
+    else
+      reads2(r).seqvect = RC ; % only keep FORWARD sequence because there is no direction check in ETDTWrec
+      reads2(r).Sequence = mat2nucleo(reads2(r).seqvect) ;
+      reference.seqvect = seqvectR ;
+      rdist(r+NREAD) = distR ;
+      if align_endR<rpositionr(r) % the read 2 in pair aligns first in the sequence (before read1) -> swap them
+          readtmp=reads1(r); reads1(r)=reads2(r); reads2(r)=readtmp;
+      end
     end
 end
 reference.Sequence = mat2nucleo(reference.seqvect) ;
-[ ~, reference.varcov ] = wcoverage(reference.seqvect(1:4,:),size(reads(1).seqvect,2),rpositionr,false) ;
-[reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
 [~,I]=sort(rpositionr); % choose the read in order to their position in reference rather than random
-[tree, weight, BMU, ~, ~, ~] = ETDTWrec(reads,1,[w2 w2],0.01,[numw numw],2*numel(reads),0.95,'seqvect',[],0,0,1,reference,3,I') ; % copy weight trick
+% Call Etree
+%[ ~, reference.varcov ] = wcoverage(reference.seqvect(1:4,:),size(reads(1).seqvect,2),rpositionr,false) ;
+%[reference.entropy, shaent] = shannonEntropy(reference.seqvect) ;
+%[tree, weight, BMU, ~, ~, ~] = ETDTWrec(reads,1,[w2 w2],0.01,[numw numw],2*numel(reads),0.95,'seqvect',[],0,0,1,reference,3,I') ; % copy weight trick
 %[numhits,weightid]=hist(BMU(:,1),unique(BMU(:,1))); % get the number of hits on each weight
+% Implement kmeans here
+for n=1:setsize % WEIGHT INITIALISATION
+    weight{n} = [ reference.seqvect(1:4,:); ones(1,length(reference.Sequence)) ] ;
+end
+BMU = zeros(2*numel(I),4) ; % weight_id, dist, position_start, position_end
+for r=I' % LEARNING
+    [ d1, seqvect1, end1, start1 ] = DTWaverage( weight{1}, reads1(r).seqvect, 1, w2, 0, 1 ) ;
+    [ d2, seqvect2, end2, start2 ] = DTWaverage( weight{2}, reads1(r).seqvect, 1, w2, 0, 1 ) ;
+    [ d3, seqvect3, end3, start3 ] = DTWaverage( weight{3}, reads1(r).seqvect, 1, w2, 0, 1 ) ;
+    if (d1<d2 && d1<d3)
+        weight{1} = seqvect1 ;
+        BMU(r,:) = [1 d1 start1 end1] ;
+        [ d1, seqvect1, end1, start1 ] = DTWaverage( weight{1}, reads2(r).seqvect, 1, w2, 0, 1 ) ;
+        BMU(r+NREAD,:) = [1 d1 start1 end1] ;
+    elseif (d2<d3)
+        weight{2} = seqvect2 ;
+        BMU(r,:) = [2 d2 start2 end2] ;
+        [ d2, seqvect2, end2, start2 ] = DTWaverage( weight{2}, reads2(r).seqvect, 1, w2, 0, 1 ) ;
+        BMU(r+NREAD,:) = [2 d2 start2 end2] ;
+    else
+        weight{3} = seqvect3 ;
+        BMU(r,:) = [3 d3 start3 end3] ;
+        [ d3, seqvect3, end3, start3 ] = DTWaverage( weight{3}, reads2(r).seqvect, 1, w2, 0, 1 ) ;
+        BMU(r+NREAD,:) = [3 d3 start3 end3] ;
+    end
+end
+weight_seq=struct('Header','','Sequence','','seqvect',0); % CONVERT TO NUCLEOTIDE
+for n=1:3
+    weight_seq(n).Header = ['weight' num2str(n)] ;
+    weight_seq(n).seqvect = weight{n} ;
+    weight_seq(n).Sequence = mat2nucleo(weight{n}) ;
+end
+% Print
 ref.Sequence=reference.Sequence;ref.Header='weightZERO';ref.seqvect=reference.seqvect;
 ref0=ref_amplicons(1); ref0.Header='NC_027424'; ref0.seqvect=[.25; .25; .25; .25; 1];
-seqalignviewer(multialign([weight2fasta(tree,weight) ref ref0]));
-[~,ali] = nwalign(ref,ref0); showalignment(ali);
-weight2fasta(tree,weight,'./S10_reconstructed_rawreads_indels.fa');
+%seqalignviewer(multialign([weight2fasta(tree,weight) ref ref0]));
+seqalignviewer(multialign([weight_seq ref ref0]));
+fastawrite('./S10_reconstructed_rawreads_indels_pe.fa',weight_seq);
+%[~,ali] = nwalign(ref,ref0); showalignment(ali);
+%weight2fasta(tree,weight,'./S10_reconstructed_rawreads_indels.fa');
+% Window based analysis
+siz=200; ovlap=0.9; plotting=0;
+[wcovera1,wentrop1, xtl]=windowsa(weight{1}, siz, ovlap, BMU(BMU(:,1)==1,:), plotting) ;
+[wcovera2,wentrop2]=windowsa(weight{2}, siz, ovlap, BMU(BMU(:,1)==2,:), plotting) ;
+[wcovera3,wentrop3]=windowsa(weight{3}, siz, ovlap, BMU(BMU(:,1)==3,:), plotting) ;
+figure; plot(1:numel(wcovera1),[wcovera1; wcovera2; wcovera3],'-o'); legend({'weight1','weight2','weight3'});
+title(['window size ' num2str(siz) ', overlap ' num2str(100*ovlap) '%']);
+set(gca,'Xtick',1:(length(wcovera1)/10):length(wcovera1),'XTickLabel',xtl(round(1:(length(xtl)/10):end))) ;
+hold on; plot(1:numel(wcovera1),ones(numel(wcovera1)).*0.125*size(BMU,1)/(length(wcovera1)*(1-ovlap)),'red'); 
+text(numel(wcovera1),0.125*size(BMU,1)/(length(wcovera1)*(1-ovlap)),'12.5%'); hold off;
+hold on; plot(1:numel(wcovera1),ones(1,numel(wcovera1)).*0.250*size(BMU,1)/(length(wcovera1)*(1-ovlap)),'red'); 
+text(numel(wcovera1),0.250*size(BMU,1)/(length(wcovera1)*(1-ovlap)),'25%');hold off;
+hold on; plot(1:numel(wcovera1),ones(1,numel(wcovera1)).*0.625*size(BMU,1)/(length(wcovera1)*(1-ovlap)),'red'); 
+text(numel(wcovera1),0.625*size(BMU,1)/(length(wcovera1)*(1-ovlap)),'62.5%');hold off;
+hold on; plot(1:numel(wcovera1),ones(1,numel(wcovera1)).*1.000*size(BMU,1)/(length(wcovera1)*(1-ovlap)),'black'); hold off;
+% OPTION1: rebuild the haplotypes by ranking windows according to coverage
+weight_seq2 = weight_seq ; % CONVERT TO NUCLEOTIDE
+lag = round(siz*(1-ovlap)) ;
+xtl = 1:lag:size(reference.seqvect,2) ;
+n=1;
+for wstart=xtl
+    [~,id] = sort([wcovera1(n) wcovera2(n) wcovera3(n)]) ;
+    wend1 = min( [wstart+siz ; size(weight_seq2(1).seqvect,2) ; size(weight_seq2(id(1)).seqvect,2) ] ) ;
+    weight_seq2(1).seqvect(:,wstart:wend1) = weight_seq(id(1)).seqvect(:,wstart:wend1) ;
+    wend2 = min( [wstart+siz ; size(weight_seq2(2).seqvect,2) ; size(weight_seq2(id(2)).seqvect,2) ] ) ;
+    weight_seq2(2).seqvect(:,wstart:wend2) = weight_seq(id(2)).seqvect(:,wstart:wend2) ;
+    wend3 = min( [wstart+siz ; size(weight_seq2(3).seqvect,2) ; size(weight_seq2(id(3)).seqvect,2) ] ) ;
+    weight_seq2(3).seqvect(:,wstart:wend3) = weight_seq(id(3)).seqvect(:,wstart:wend3) ;
+    n=n+1;
+end   
+for n=1:3
+    weight_seq2(n).Sequence = mat2nucleo(weight_seq2(n).seqvect) ;
+end
+fastawrite('./S10_reconstructed_rawreads_indels_pe_joint.fa',weight_seq2);
+% at this stage, it is possible to realign the reads to the new joint weight matrices:
+weight_backup=weight; weight_seq_backup=weight_seq; weight{1}=weight_seq2(1).seqvect; weight{2}=weight_seq2(2).seqvect; weight{3}=weight_seq2(3).seqvect;
+% OPTION2: use multinomial and transition to assemble windows (HMM style) by using known frequencies of the mix
+% TBD: ONLY WORKS WITH HAPLO OF IDENTICAL LENGTH?
+siz=200; ovlap=0.9;
+xtl = 1:round(siz*(1-ovlap)):size(reference.seqvect,2) ;
+addpath('/home/louis/Documents/Matlab/mfiles/hmmfreq');
+nsub = 3 ; % number of sub sequences (e.g. weights matrices) to assign
+y = list_combi(nsub) ; % keep the 3 most frequent
+emission = zeros(nsub^3,length(xtl)) ; % probability for the nsub^3 possible states for each window
+transition = zeros(nsub^3,length(xtl)) ; % transition between states
+% temporary variables
+emissionproba = zeros(1,1) ; % emission probability for 1 window and 1 state
+transitionproba = zeros(1,nsub^3) ; % transtion probability for 1 window and 1 state from the nsub^3 previous states
+tr = zeros(1,3) ; % transition cost (sequence edit distance or sequence similarity pariwise) for each sequence
+% calculate probabilities
+true_freq = [.625 .25 .125] ;
+n=1;
+for wstart=xtl
+    observations = [wcovera1(n) wcovera2(n) wcovera3(n)] ; % observed coverages
+    for m=1:size(y,1)
+        % multinomiale on coverage for emission probabilities
+        % = [ sum(covers(y(m,:)==1)) sum(covers(y(m,:)==2)) sum(covers(y(m,:)==3)) ] ;
+        model = [ true_freq(1)*(y(m,1)==1)+true_freq(2)*(y(m,2)==1)+true_freq(3)*(y(m,3)==1)...
+                  true_freq(1)*(y(m,1)==2)+true_freq(2)*(y(m,2)==2)+true_freq(3)*(y(m,3)==2)...
+                  true_freq(1)*(y(m,1)==3)+true_freq(2)*(y(m,2)==3)+true_freq(3)*(y(m,3)==3)];
+        % model cannot contains errors, therefore allow 1% errors shared
+        errora=0.05;
+        if (sum(model==0)==2)
+            model(model==1)=1-errora;
+            model(model==0)=errora/2;
+        elseif (sum(model==0)==1)
+            model(model>0)=model(model>0)-errora/2;
+            model(model==0)=errora;
+        end
+        emissionproba = log( mnpdf(observations,model) ) ;
+        %fprintf(1,'%.2f %.2f %.2f  => %.3f\n',model,emission(m,n)) ;
+        if wstart>1 % percentage similarity to find transition probabilities
+            wend1 = min( [wstart+siz ; size(weight_seq(1).seqvect,2) ] ) - lag ;
+            wend2 = min( [wstart+siz ; size(weight_seq(2).seqvect,2) ] ) - lag ;
+            wend3 = min( [wstart+siz ; size(weight_seq(3).seqvect,2) ] ) - lag ;
+            for m2=1:size(y,1) % consider all the possible states for the previous window
+                tr(1) = DTWaverage( weight_seq(y(m,1)).seqvect(:,wstart:wend1), weight_seq(y(m2,1)).seqvect(1:4,wstart:wend1), 1, 0, 0, 1 ) ;
+                tr(2) = DTWaverage( weight_seq(y(m,2)).seqvect(:,wstart:wend2), weight_seq(y(m2,2)).seqvect(1:4,wstart:wend2), 1, 0, 0, 1 ) ;
+                tr(3) = DTWaverage( weight_seq(y(m,3)).seqvect(:,wstart:wend3), weight_seq(y(m2,3)).seqvect(1:4,wstart:wend3), 1, 0, 0, 1 ) ;
+                transitionproba(m2) = sum(tr) ;
+            end
+            % CHECK CONVERSION DISTANCE D TO PROBA, NEED SIMILARITY S?? S=1/(1+D) OR S=e^(-D^2).B ??
+            transitionproba = log( transitionproba./sum(transitionproba) ) ; % turn into probabilities
+            [M,I] = max(transitionproba) ;
+            transition(m,n) = I ;
+            emission(m,n) = emission(m,n-1) + M ;
+        else
+            emission(m,n) = emissionproba ;
+        end
+    end
+    n=n+1;
+end
+% find the best path and reconstruct the 3 haplotypes
+haplo = weight_seq ;
+wend1 = size(weight_seq(1).seqvect,2) ;
+wend2 = size(weight_seq(2).seqvect,2) ;
+wend3 = size(weight_seq(3).seqvect,2) ;
+for x=length(xtl):-1:2 % index on windows
+    fprintf(1,'%d\n',x);
+    [~,I] = max(emission(:,x)) ;
+    wstart1 = wend1 - lag ;
+    wstart2 = wend2 - lag ;
+    wstart3 = wend3 - lag ;
+    haplo(1).seqvect(:,wstart1:wend1) = weight_seq(y(I,1)).seqvect(:,wstart1:wend1) ;
+    haplo(2).seqvect(:,wstart2:wend2) = weight_seq(y(I,2)).seqvect(:,wstart2:wend2) ;
+    haplo(3).seqvect(:,wstart3:wend3) = weight_seq(y(I,3)).seqvect(:,wstart3:wend3) ;
+    wend1 = wstart1 ;
+    wend2 = wstart2 ;
+    wend3 = wstart3 ;
+end
+for n=1:3
+    haplo(n).Sequence = mat2nucleo(haplo(n).seqvect) ;
+end
+% Print
+fastawrite('./S10_reconstructed_hmmf.fa',haplo);
 
+
+%% Demography: test correlation between node height intervals of (windowed) reconstructed haplotypes and true haplotypes tree
+addpath('/home/louis/Documents/Matlab/mfiles/nucleoveq');
+cd '/home/louis/Documents/Projects/ShortReads/test_nucleoveq/demography' ;
+true_seq=fastaread('/home/louis/Documents/Projects/ShortReads/test_nucleoveq/1PopDNA_40_1200_60k_28Feb2017_152530.haplo.fasta') ;
+for m=1:numel(true_seq), true_seq(m).seqvect=nucleo2mat(true_seq(m).Sequence) ; end
+filefq1='/home/louis/Documents/Projects/ShortReads/test_nucleoveq/1PopDNA_40_1200_60k_28Feb2017_152530.paired1.fq';
+filefq2='/home/louis/Documents/Projects/ShortReads/test_nucleoveq/1PopDNA_40_1200_60k_28Feb2017_152530.paired2.fq';
+reads1=fastqread(filefq1);
+reads2=fastqread(filefq2);
+read2true=zeros(numel(reads1),1); % record which trueseq XX each read comes from, considering Header pattern is '1_XX-n'
+for m=1:numel(reads1)
+    reads1(m).seqvect=nucleo2mat(reads1(m).Sequence) ;
+    read2true(m)=str2double(reads1(m).Header(3:strfind(reads1(m).Header,'-')-1));
+    reads2(m).seqvect=nucleo2mat(reads2(m).Sequence) ;
+end
+setsize=10 ;
+numw=setsize ; % number of weight matrices to project the reads on
+rndset = randsample(length(true_seq),setsize) ;
+reference = struct('Header','root reference','Sequence','','seqvect',[]) ;
+reference.seqvect = mutatematseq(true_seq(randsample(rndset,1)).seqvect,0.05) ;
+reference.Sequence = mat2nucleo(reference.seqvect) ;
+reference.seqvect = [ reference.seqvect; ones(1,size(reference.seqvect,2)) ] ; % add persistence vector
+reads1 = reads1(ismember(read2true,rndset)) ;
+reads2 = reads2(ismember(read2true,rndset)) ;
+NREAD=numel(reads1);
+% root weight initialisation: align all reads once to the reference to create initial weight
+N=2*numel(reads1);
+rlen=cellfun(@(x) length(x), {reads1(:).Sequence reads2(:).Sequence});
+Lr=sum(rlen)/length(rlen); % average length of reads
+LR=length(reference.Sequence);
+cover1=(N*Lr)/LR; % average coverage of the reference matrix
+w1 = nthroot(0.001,(cover1/2)-1) ; fprintf( 1,'cover1=%.2f, w1=%.2f\n',cover1,w1 );
+cover2=cover1/numw; % average coverage of each weight matrix
+w2 = nthroot(0.001,(cover2/2)-1) ; fprintf( 1,'cover2=%.2f, w2=%.2f\n',cover2,w2 );
+rindex = randperm(numel(reads1)) ;
+rpositionr = zeros(numel(reads1),1) ; % position of the alignment of the first read in each pair
+rdist = zeros(numel(reads1)+numel(reads2),1);
+for r=rindex
+    % align read 1
+    [ distF, seqvectF, align_endF ] = DTWaverage( reference.seqvect, reads1(r).seqvect, 1, w1, 0, 1 ) ;
+    RC = reversecomplement(reads1(r).seqvect);
+    [ distR, seqvectR, align_endR ] = DTWaverage( reference.seqvect, RC, 1, w1, 0, 1 ) ;
+    if distF<distR
+      reference.seqvect = seqvectF ;
+      rpositionr(r) = align_endF ;
+      rdist(r) = distF ;
+    else
+      reads1(r).seqvect = RC ; % only keep FORWARD sequence because there is no direction check in ETDTWrec
+      reads1(r).Sequence = mat2nucleo(reads1(r).seqvect) ;
+      reference.seqvect = seqvectR ;
+      rpositionr(r) = align_endR ;
+      rdist(r) = distR ;
+    end
+    % align read 2
+    [ distF, seqvectF, align_endF ] = DTWaverage( reference.seqvect, reads2(r).seqvect, 1, w1, 0, 1 ) ;
+    RC = reversecomplement(reads2(r).seqvect);
+    [ distR, seqvectR, align_endR ] = DTWaverage( reference.seqvect, RC, 1, w1, 0, 1 ) ;
+    if distF<distR
+      reference.seqvect = seqvectF ;
+      rdist(r+NREAD) = distF ;
+      if align_endF<rpositionr(r) % the read 2 in pair aligns first in the sequence (before read1) -> swap them
+          readtmp=reads1(r); reads1(r)=reads2(r); reads2(r)=readtmp;
+      end 
+    else
+      reads2(r).seqvect = RC ; % only keep FORWARD sequence because there is no direction check in ETDTWrec
+      reads2(r).Sequence = mat2nucleo(reads2(r).seqvect) ;
+      reference.seqvect = seqvectR ;
+      rdist(r+NREAD) = distR ;
+      if align_endR<rpositionr(r) % the read 2 in pair aligns first in the sequence (before read1) -> swap them
+          readtmp=reads1(r); reads1(r)=reads2(r); reads2(r)=readtmp;
+      end
+    end
+end
+reference.Sequence = mat2nucleo(reference.seqvect) ;
+[~,I]=sort(rpositionr);
+for n=1:setsize % WEIGHT INITIALISATION
+    weight{n} = [ reference.seqvect(1:4,:); ones(1,length(reference.Sequence)) ] ;
+end
+BMU = zeros(2*numel(I),4) ; % weight_id, dist, position_start, position_end
+nbmu = zeros(1,setsize) ;
+d=zeros(1,setsize);
+seqvect=cell(1,setsize);
+endr=zeros(1,setsize);
+startr=zeros(1,setsize);
+for r=I' % LEARNING
+    for n=1:setsize
+        [ d(n), seqvect{n}, endr(n), startr(n) ] = DTWaverage( weight{n}, reads1(r).seqvect, 1, w2, 0, 1 ) ;
+    end
+    [~,m]=min(d);
+    weight{m} = seqvect{m} ;
+    BMU(r,:) = [m d(m) startr(m) endr(m)] ;
+    [ d1, seqvect1, end1, start1 ] = DTWaverage( weight{m}, reads2(r).seqvect, 1, w2, 0, 1 ) ;
+    BMU(r+NREAD,:) = [m d1 start1 end1] ;
+    nbmu(m) = nbmu(m)+1 ;
+    nohits = find(nbmu==0) ; % copy weight to no hits weight
+    if ~isempty(nohits)
+        nohitsid = nohits(randi(length(nohits))) ;
+        weight{nohitsid} = weight{BMU(r,1)} ;
+    end
+end
+weight_seq=struct('Header','','Sequence','','seqvect',0); % CONVERT TO NUCLEOTIDE
+for n=1:setsize
+    weight_seq(n).Header = ['weight' num2str(n)] ;
+    weight_seq(n).seqvect = weight{n} ;
+    weight_seq(n).Sequence = mat2nucleo(weight{n}) ;
+end
+% Print alignment
+seqalignviewer(multialign([weight_seq true_seq(rndset)']));
+% build UPGMA trees to compare node intervals
+% do it in APE (R)
+fastawrite('./true_seq.fa',true_seq(rndset));
+fastawrite('./weight_seq.fa',weight_seq);
+% call test_nucleovq/demography/Cmp_nodeheight.r
+
+
+%% Assemble new Western Grey Reference
+reads1=fastqread('/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/WesternGrey_nucleoveq/ErrorCorrectedTrimmed16_S16_L001_R1_001.fastq');
+reads2=fastqread('/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/WesternGrey_nucleoveq/ErrorCorrectedTrimmed16_S16_L001_R2_001.fastq');
+draft_ref='/home/louis/Documents/Projects/Pooling3/Sequencing/Assemblies/WesternGrey_nucleoveq/DraftWesternGreyMitochondrialCompleteReference.fasta';
+% number of sub sequences (e.g. weights matrices) to assign
+nsub = 1 ;
+% use competitive learning to map reads to weight templates
+wgref_seq = alignreadsvq(reads1,reads2,draft_ref,nsub) ;

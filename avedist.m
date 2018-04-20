@@ -19,7 +19,7 @@ function [average_minimum_dist, pct_mini_is_true] = avedist(tree, weight, true_s
             s=s+1;
         end
     else
-        weight_seq=[];
+        weight_seq = weight;
     end
     
     % make sure the data structure dimension are consistent
@@ -60,7 +60,7 @@ function [average_minimum_dist, pct_mini_is_true] = avedist(tree, weight, true_s
         end
     end
     
-    % return the percentage of weight sequence which have a true seqeunce as their closest 
+    % return the percentage of weight sequence which have a true sequence as their closest 
     pct_mini_is_true = sum(mini_is_true)/numel(weight_seq) ;
     
 end

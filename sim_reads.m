@@ -1,4 +1,4 @@
-function [ reads ] = sim_reads(haplo,readlen,coverage,errorrate)
+function [ reads, startpos ] = sim_reads(haplo,readlen,coverage,errorrate)
 % generate error-free short read sequences from a set of haplotypes with average
 % coverage.
 % Header of read sequences names is "readX_haploY_posZ" where read number X from sequence Y starting at position Z 
@@ -15,12 +15,17 @@ function [ reads ] = sim_reads(haplo,readlen,coverage,errorrate)
     len = abs(mean(arrayfun(@(x) length(x.Sequence), haplo))) ;
     
     readnum = (nhaplo * len * coverage) / readlen ; % coverage
+    startpos = zeros(1,readnum) ;
     for m=1:readnum
         haplo_id=randi([1 nhaplo],1,1) ;
-        startpos=randi([1 length(haplo(haplo_id).Sequence)-readlen+1],1,1);
-        endpos=startpos+readlen-1;
-        reads(m).Header=['read' num2str(m) '_haplo' num2str(haplo_id) '_pos' num2str(startpos)] ;
-        reads(m).seqvect=haplo(haplo_id).seqvect(1:4,startpos:endpos);
+        startpos(m)=randi([1 length(haplo(haplo_id).Sequence)-readlen+1],1,1);
+        endpos=startpos(m)+readlen-1;
+        reads(m).Header=['read' num2str(m) '_haplo' num2str(haplo_id) '_pos' num2str(startpos(m))] ;
+        if ( isfield(haplo(haplo_id),'seqvect') )
+          reads(m).seqvect=haplo(haplo_id).seqvect(1:4,startpos(m):endpos);
+        else
+          reads(m).seqvect=nucleo2mat( haplo(haplo_id).Sequence(startpos(m):endpos) );  
+        end
         if errorrate>0
             nerr=round(normrnd(readlen*errorrate/100,1)); % sample the number of error(s) in that read
             if nerr>0

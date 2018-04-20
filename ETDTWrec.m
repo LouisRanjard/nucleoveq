@@ -491,6 +491,7 @@ for e=1:epoch % each epoch
             if length(nohits)>0
                 nohitsid=nohits(randi(length(nohits)));
                 weight{nohitsid}=weight{BMU(s,1)} ; % copy the weight matrix
+                fprintf(1,'weight copied\n');
             end
         end
         %%%%% computes WITHIN CLUSTER INDEX (DaviesBouldin clustering index)

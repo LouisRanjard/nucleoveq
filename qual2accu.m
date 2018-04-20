@@ -7,5 +7,9 @@ function [ accu, phred] = qual2accu(qual,offset)
 % 64 for Solexa+64, Illumina 1.3+, Illumina 1.5+ 
 %
 
+if nargin<2
+    offset=33;
+end
+
 phred = double(qual)-offset ;
 accu = 10.^(-phred/10) ;

@@ -4,6 +4,9 @@ function [ ] = printmat(matseq,a,b)
     if nargin<2
         a=1;
         b=length(matseq);
+    else
+        a=max(a,1) ;
+        b=min(b,length(matseq)) ;
     end
 
 %     tmp=matseq(:,a:b);
@@ -24,7 +27,11 @@ function [ ] = printmat(matseq,a,b)
     
     for m=1:length(matseq(:,1))
         for n=a:b
-            fprintf(1,'%.4f\t',matseq(m,n));
+            if m==6 % coverage
+              fprintf(1,'%.0f\t',matseq(m,n));
+            else
+              fprintf(1,'%.4f\t',matseq(m,n));
+            end
         end
         fprintf(1,'\n');
     end
