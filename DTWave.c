@@ -363,11 +363,11 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
     
     /* debug variables
     int db_n=0; */
-    /*PRINT*/
+    /* PRINT for DEBUG
     char read[numcols+numrows];
     char ref[numcols+numrows];
     char new[numcols+numrows];
-    double vectsum=0;
+    double vectsum=0;*/
 
     /* trace back the alignment and implement the average vector sequence */
     l=0;
@@ -394,7 +394,7 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
                    *(mat4+n+(numv1*l)) = *(mat1+n+(numv1*(j-1)));
                }
                /*printf("\ncase 1,n=%i,numv1=%i,numv2=%i,l=%i,pos=%i,val=%f\n",n,numv1,numv2,l,n+1+(numv1*l),*(mat4+n+1+(numv1*l)));*/
-               read[l]=printbase(mat2,numv2*(i-1)); ref[l]='-'; new[l]=printbase(mat4,numv1*l);/* */
+               /* read[l]=printbase(mat2,numv2*(i-1)); ref[l]='-'; new[l]=printbase(mat4,numv1*l);*/
                i--;
                break;
            case 2: /* SUBSTITUTION */
@@ -416,7 +416,7 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
                /*}*/
                /* persistence vector */
                *(mat4+n+(numv1*l)) = weight*( *(mat1+n+(numv1*(j-1))) ) + (1-weight); /* pull back persistence toward 1 */
-               read[l]=printbase(mat2,numv2*(i-1)); ref[l]=printbase(mat1,numv1*(j-1)); new[l]=printbase(mat4,numv1*l); /* */
+               /* read[l]=printbase(mat2,numv2*(i-1)); ref[l]=printbase(mat1,numv1*(j-1)); new[l]=printbase(mat4,numv1*l); */
                n++; *(mat4+n+(numv1*l))+=1; /* coverage */
                i--;
                j--;
@@ -434,7 +434,7 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
                }else {
                    *(mat4+n+(numv1*l)) = *(mat1+n+(numv1*(j-1)));
                }
-               read[l]='-'; ref[l]=printbase(mat1,numv1*(j-1)); new[l]=printbase(mat4,numv1*l); /* */
+               /* read[l]='-'; ref[l]=printbase(mat1,numv1*(j-1)); new[l]=printbase(mat4,numv1*l); */
                j--;
                break;
            default:
@@ -446,32 +446,32 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
        l++;
     }
     /*if (n_ins>0 || n_del>0) {printf("n_ins=%i ; n_del=%i\n",n_ins,n_del);}*/
-    /**/printf("\nnumcols=%i(%i),numrows=%i(%i),numv1=%i,numv2=%i,l=%i,maxt+n_ins-n_del=%i(%i,%i,%i),refstart=%.0f\n",numcols,i,numrows,j,numv1,numv2,l,maxt+n_ins-n_del,maxt,n_ins,n_del,*refstart);
-    /*PROBLEM HERE?:*/printf("t[0:l-1]:\t\t"); for ( it=0 ; it<=(l-1) ; it++ ) { printf("%d\t",*(t+it)); } printf("\n");
+    /*printf("\nnumcols=%i(%i),numrows=%i(%i),numv1=%i,numv2=%i,l=%i,maxt+n_ins-n_del=%i(%i,%i,%i),refstart=%.0f\n",numcols,i,numrows,j,numv1,numv2,l,maxt+n_ins-n_del,maxt,n_ins,n_del,*refstart);*/
+    /*PROBLEM HERE?:printf("t[0:l-1]:\t\t"); for ( it=0 ; it<=(l-1) ; it++ ) { printf("%d\t",*(t+it)); } printf("\n");*/
     
     /*PRINT*/
     /*printf("t[maxt+n_ins-n_del]:\t"); for (n=0;n<=(maxt+n_ins-n_del);n++){ printf("%d\t",*(t+n)); } printf("\n"); t is indexed from 0 to (l-1) NOT BY maxt*/
-    printf("t[l-1:0]:\t\t"); for (n=l-1;n>=0;n--){ printf("%d\t",*(t+n)); } printf("\n");/**/
+    /*printf("t[l-1:0]:\t\t"); for (n=l-1;n>=0;n--){ printf("%d\t",*(t+n)); } printf("\n");*/
     /* print a bar every 10 nucleotides */
-    /* */ for (n=l-1;n>=0;n--){ if (n%10==0) {printf("|");} else {printf("\t");} } printf("\n"); 
+    /* for (n=l-1;n>=0;n--){ if (n%10==0) {printf("|");} else {printf("\t");} } printf("\n"); 
     for (n=l-1;n>=0;n--){ printf("%c\t",ref[n]); } printf("\n");
     for (n=l-1;n>=0;n--){ printf("%c\t",read[n]); } printf("\n");
-    for (n=l-1;n>=0;n--){ printf("%c\t",new[n]); } printf("\n");
-    /*PRINT mat4*/
+    for (n=l-1;n>=0;n--){ printf("%c\t",new[n]); } printf("\n"); */
+    /*PRINT mat4
     printf("\n");
     for ( tb=0 ; tb<=l-1 ; tb++ ) { printf( "%d\t",tb); } printf("\n");
     for ( n=0 ; n<numv1 ; n++ ) {
         for ( tb=l-1 ; tb>=0 ; tb-- ) {
             printf( "%.2f\t", *(mat4+n+(numv1*(tb))) ); }
         printf("\n");
-    }
+    }*/
     
     /* compute average with correct time direction and number of time points */
     int c,m,last_t=-1,counter=1,mat4_start,mat4_end ;
     *duree = maxt+n_ins-n_del ;
     mat4_start = (int)*refstart ; /* the region of mat4 coeverd by the read */
     mat4_end = (int)*refend+n_ins-n_del ; 
-    printf("mat4_start=%d,mat4_end=%d\n",mat4_start,mat4_end); /**/
+    /*printf("mat4_start=%d,mat4_end=%d\n",mat4_start,mat4_end); */
     /* mata = (double *)mxMalloc((*duree)*numv1*sizeof(double)) ; FASTER */
     mata = (double *)mxCalloc((*duree)*numv1,sizeof(double)) ; /* allocate and initialise to 0, needed to initialise coverage to 0 */
     tb=l-1 ;
