@@ -43,3 +43,14 @@
 
 # LaTex temp file
 *.aux
+
+# other specific file
+DTWave.mexa64.backup15Au2017
+DTWave.mexa64.backup30May2017
+allconsensus.fa
+trinity_align.fasta
+var.vcf
+var_filt.vcf.gz
+var_filt.vcf.gz.tbi
+
+
