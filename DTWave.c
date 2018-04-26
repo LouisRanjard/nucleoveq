@@ -20,7 +20,7 @@
 double warpav(double *traceb, double *d, int numrows, int numcols, double *indelc, int fe, double *refend);
 double warpav_ce(double *traceb, double *d, int numrows, int numcols, double *indelc, int fe, double *refend);
 double *averseq(int *duree, double *traceb, double *mat1, double *mat2, double weight, int numrows, int numcols, int numv, double *refstart);
-double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, double weight, int numrows, int numcols, int numv1, int numv2, double *refstart, double indel_limit);
+double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, double weight, int numrows, int numcols, int numv1, int numv2, double *refstart, double *refend, double indel_limit);
 int mincost(double cost[], int a, int b);
 double louiround(double x);
 void euclidist(double *d, double *mat1, double *mat2, double *indelc, int numrows, int numcols, int numv1, int numv2, double *cow, int fe);
@@ -336,7 +336,7 @@ double *averseq(int *duree, double *traceb, double *mat1, double *mat2, double w
 }
 
 /* compute the average sequence given the alignment */
-double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, double weight, int numrows, int numcols, int numv1, int numv2, double *refstart, double indel_limit)
+double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, double weight, int numrows, int numcols, int numv1, int numv2, double *refstart, double *refend, double indel_limit)
 {
     int i,j,l,n=0;
     int maxt=0; /* length of the matrix */
@@ -367,6 +367,7 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
     char read[numcols+numrows];
     char ref[numcols+numrows];
     char new[numcols+numrows];
+    double vectsum=0;
 
     /* trace back the alignment and implement the average vector sequence */
     l=0;
@@ -377,11 +378,11 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
        if ( temp>maxt ) { maxt=temp; } 
        *(mat4+(numv1-1)+(numv1*l)) = *(mat1+(numv1-1)+(numv1*(j-1))) ; /* copy coverage from the reference */
        switch ( (int) *(traceb+((numrows+1)*(i))+(j)) ) {
-           case 1:
+           case 1: /* INSERTION */
                for (n=0;n<numv2;n++) { 
-                   /**(mat4+n+(numv1*l)) = (*(mat1+n+(numv1*(j-1))));
-                   *(mat4+n+(numv1*l)) = (*(mat2+n+(numv2*(i-1))));*/
-                   *(mat4+n+(numv1*l)) = weight*( *(mat1+n+(numv1*(j-1))) ) + (1-weight)*( *(mat2+n+(numv2*(i-1))) ); /*INSERTION:weight the inserted base value with read value, it will be averaged with other bases mapping to the same position in the next loop (see counter)*/
+                   /* *(mat4+n+(numv1*l)) = (*(mat1+n+(numv1*(j-1)))); reference nucleotide */
+                   *(mat4+n+(numv1*l)) = (*(mat2+n+(numv2*(i-1)))); /* read nucleotide */
+                   /* *(mat4+n+(numv1*l)) = weight*( *(mat1+n+(numv1*(j-1))) ) + (1-weight)*( *(mat2+n+(numv2*(i-1))) ); /* Alternatively: weight the inserted base value with read value, it will be averaged with other bases mapping to the same position in the next loop (see counter)*/
                }
                if (j<numrows) { /* we are inside the alignment to reference (not in the free ends) */
                    *(mat4+n+(numv1*l)) = *(mat1+n+(numv1*(j-1))) + (1-weight);
@@ -396,7 +397,7 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
                read[l]=printbase(mat2,numv2*(i-1)); ref[l]='-'; new[l]=printbase(mat4,numv1*l);/* */
                i--;
                break;
-           case 2:
+           case 2: /* SUBSTITUTION */
                /*vsum=0; store the sum to normalise proba so that they sum to 1*/
                for (n=0;n<numv2;n++) { 
                     *(mat4+n+(numv1*l)) = weight*( *(mat1+n+(numv1*(j-1))) ) + (1-weight)*( *(mat2+n+(numv2*(i-1))) ); 
@@ -420,16 +421,16 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
                i--;
                j--;
                break;
-           case 3:
+           case 3: /* DELETION: keep the reference value */
                for (n=0;n<numv2;n++) { 
-                   *(mat4+n+(numv1*l)) = (*(mat1+n+(numv1*(j-1)))); /*DELETION:keep the reference value*/
+                   *(mat4+n+(numv1*l)) = (*(mat1+n+(numv1*(j-1)))); 
                }
                if (i<numcols && i>0) { /* we are inside the alignment to reference (not in the free ends) */
                    *(mat4+n+(numv1*l)) = *(mat1+n+(numv1*(j-1))) - (1-weight) ;
                    /**(mat4+n+(numv1*l)) =  weight*( *(mat1+n+(numv1*(j-1))) ) ;persistence*/ /*printf("\ndel");*/
                    if ( *(mat4+n+(numv1*l))<(1-indel_limit) ) {/**/
                        n_del++;
-                   }/**/
+                   }
                }else {
                    *(mat4+n+(numv1*l)) = *(mat1+n+(numv1*(j-1)));
                }
@@ -445,12 +446,12 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
        l++;
     }
     /*if (n_ins>0 || n_del>0) {printf("n_ins=%i ; n_del=%i\n",n_ins,n_del);}*/
-    /*printf("\nnumcols=%i(%i),numrows=%i(%i),numv1=%i,numv2=%i,l=%i,maxt+n_ins-n_del=%i(%i,%i,%i),refstart=%.0f\n",numcols,i,numrows,j,numv1,numv2,l,maxt+n_ins-n_del,maxt,n_ins,n_del,*refstart);*/
-    /*PROBLEM HERE?:printf("t:\n"); for ( it=0 ; it<=(l-1) ; it++ ) { printf("%d\t",*(t+it)); } printf("\n");*/
+    /**/printf("\nnumcols=%i(%i),numrows=%i(%i),numv1=%i,numv2=%i,l=%i,maxt+n_ins-n_del=%i(%i,%i,%i),refstart=%.0f\n",numcols,i,numrows,j,numv1,numv2,l,maxt+n_ins-n_del,maxt,n_ins,n_del,*refstart);
+    /*PROBLEM HERE?:*/printf("t[0:l-1]:\t\t"); for ( it=0 ; it<=(l-1) ; it++ ) { printf("%d\t",*(t+it)); } printf("\n");
     
     /*PRINT*/
-    for (n=0;n<=(maxt+n_ins-n_del);n++){ printf("%d\t",*(t+n)); } printf("\n");/**/
-    for (n=l-1;n>=0;n--){ printf("%d\t",*(t+n)); } printf("\n");/**/
+    /*printf("t[maxt+n_ins-n_del]:\t"); for (n=0;n<=(maxt+n_ins-n_del);n++){ printf("%d\t",*(t+n)); } printf("\n"); t is indexed from 0 to (l-1) NOT BY maxt*/
+    printf("t[l-1:0]:\t\t"); for (n=l-1;n>=0;n--){ printf("%d\t",*(t+n)); } printf("\n");/**/
     /* print a bar every 10 nucleotides */
     /* */ for (n=l-1;n>=0;n--){ if (n%10==0) {printf("|");} else {printf("\t");} } printf("\n"); 
     for (n=l-1;n>=0;n--){ printf("%c\t",ref[n]); } printf("\n");
@@ -466,20 +467,29 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
     }
     
     /* compute average with correct time direction and number of time points */
-    int c,m,last_t=-1,counter=1 ;
+    int c,m,last_t=-1,counter=1,mat4_start,mat4_end ;
     *duree = maxt+n_ins-n_del ;
-    /*printf("allocate %d\n",*duree); */
+    mat4_start = (int)*refstart ; /* the region of mat4 coeverd by the read */
+    mat4_end = (int)*refend+n_ins-n_del ; 
+    printf("mat4_start=%d,mat4_end=%d\n",mat4_start,mat4_end); /**/
     /* mata = (double *)mxMalloc((*duree)*numv1*sizeof(double)) ; FASTER */
     mata = (double *)mxCalloc((*duree)*numv1,sizeof(double)) ; /* allocate and initialise to 0, needed to initialise coverage to 0 */
     tb=l-1 ;
     /*printf("-> ta=%d, tb=%d, t+tb=%d\n",ta,tb,*(t+tb));*/
-    for ( ta=1 ; ta<=(*duree) ; ta++ ) {
-        /*printf("0 ta=%d, tb=%d, t+tb=%d mat4(4,tb)=%.2f \n",ta,tb,*(t+tb),(*(mat4+4+(numv1*(tb)))) ); */
-        /*printf("mata(ta=%d), mat4(tb=%d), t+tb=%d, maxt=%d\n",ta,tb,*(t+tb),maxt); */
+    for ( ta=1 ; ta<=(*duree) ; ta++ ) {/**/
+        if (tb<0) {break;} /* stop when been through all the time points */
         /* PRINT ALIGNMENT
         for ( n=0 ; n<numv2 ; n++ ) {printf("") ;} */
-        /* perform INDELS in reference */
-        if ( *(mat4+numv2+(numv1*(tb)))>(1+indel_limit) ){ /* printf("INSERTION\n"); *//* */
+        /* DEBUG: print sum of vector position, should be always one
+        vectsum=0;
+        for ( n=0 ; n<numv2 ; n++ ) {
+            vectsum = vectsum + *(mat4+n+(numv1*(ta-1))) ;
+        }
+        printf("mata(ta=%d), mat4(tb=%d)=%.2f, t+tb=%d, maxt=%d, vectsum=%.3f, last_t=%d",ta,tb,(*(mat4+4+(numv1*(tb)))),*(t+tb),maxt,vectsum,last_t); 
+        if (vectsum!=1) {printf(" * ");}
+        else {printf("   ");} */
+        /* perform INDELS in reference, only in the region covered by the read */
+        if ( *(mat4+numv2+(numv1*(tb)))>(1+indel_limit) && mat4_start<*(t+tb) && mat4_end>*(t+tb) ){ /* printf("INSERTION\n"); *//* make sure we are in the region covered by read ie not free-ends */
             /*printf("INSERTION mata(ta=%d), mat4(tb=%d), t+tb=%d, last_t=%d\n",ta,tb,*(t+tb),last_t);*/
             for ( n=0 ; n<numv2 ; n++ ) { /* insert new base */
                 *(mata+n+(numv1*(ta-1))) = *(mat4+n+(numv1*(tb))) ;
@@ -489,24 +499,25 @@ double *averseq_fe(int *duree, double *traceb, double *mat1, double *mat2, doubl
             last_t = *(t+tb) ;
             tb-- ; /* */
             for ( m=tb ; m>=0 ; m-- ) { *(t+m) = *(t+m)+1 ; } /* change the mapping position in the alignment for all successive positions */
-        }else if ( *(mat4+numv2+(numv1*(tb)))<(1-indel_limit) ){ /* printf("DELETION\n"); *//* */
+        }else if ( *(mat4+numv2+(numv1*(tb)))<(1-indel_limit) && mat4_start<*(t+tb) && mat4_end>*(t+tb) ){ /* printf("DELETION\n"); *//* make sure we are in the region covered by read ie not free-ends */
             /*printf("DELETION mata(ta=%d), mat4(tb=%d), t+tb=%d, last_t=%d\n",ta,tb,*(t+tb),last_t);*/
             ta-- ;
             tb-- ;
-        }else{ /*printf("SUBSTITUTION\n");*/
+        }else{ /**/
             /* if (*t+tb<0) {printf("t must be positive");break;} */
-            /* 1st option: keep the reference's vector value */
-            /* 2nd option: compute mean of all position mapping to the same position: */
-            if ( *(t+tb)==last_t ){ /* still aligning to the same position, compute the running average */
-                /*printf("A ta(mata)=%d, tb(mat4,t)=%d, *(t+tb)=%d, last_t=%d, persist=%.4f\n",ta,tb,*(t+tb),last_t,*(mat4+numv1+(numv1*(tb)))); */
+            if ( *(t+tb)==last_t ){ /* printf("SUBSTITUTION =\n");still aligning to the same position */
                 counter++;
                 ta--;
-                for ( n=0 ; n<numv1-1 ; n++ ) { /* "counter" loop, do running average for persistence value too */
-                    /*printf("mata=%.4f, mat4=%.4f, counter=%d\n",*(mata+n+(numv1*(ta-1))),*(mat4+n+(numv1*(tb))),counter); */
+                /* 1st option: keep the reference's vector values and increase persistence (n=4) value */
+                *(mata+4+(numv1*(ta-1))) = *(mata+4+(numv1*(ta-1))) + (1-weight) ;
+                /*printf("A ta(mata)=%d, tb(mat4,t)=%d, *(t+tb)=%d, last_t=%d, persist=%.4f\n",ta,tb,*(t+tb),last_t,*(mat4+numv1+(numv1*(tb)))); */
+                /* 2nd option: compute mean (running average) of all positions mapping to the same position ("counter" loop, do running average for nucleotides and persistence value): */
+                /*printf("mata=%.4f, mat4=%.4f, counter=%d\n",*(mata+n+(numv1*(ta-1))),*(mat4+n+(numv1*(tb))),counter); */
+                /* for ( n=4 ; n<numv1-1 ; n++ ) { 
                     *(mata+n+(numv1*(ta-1))) = *(mata+n+(numv1*(ta-1))) + ( *(mat4+n+(numv1*(tb))) - *(mata+n+(numv1*(ta-1)))  ) / counter ;
-                }
-            }else{
-                /*printf("B ta(mata)=%d, tb(mat4,t)=%d, *(t+tb)=%d, last_t=%d\n",ta,tb,*(t+tb),last_t);*/
+                }*/
+            }else{ /*printf("SUBSTITUTION\n");
+                printf("B ta(mata)=%d, tb(mat4,t)=%d, *(t+tb)=%d, last_t=%d\n",ta,tb,*(t+tb),last_t);*/
                 counter=1;
                 for ( n=0 ; n<numv1-1 ; n++ ) { /* all bases + persistence value */
                     *(mata+n+(numv1*(ta-1))) = *(mat4+n+(numv1*(tb))) ;
@@ -771,7 +782,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
             }
             indel_limit = weight*indel_weight ;
             printf("distance=%f - weight=%.3f - indel_weight=%.3f - indel_limit=%.3f\n", *distance, weight, indel_weight, indel_limit);/*  */
-            mataverage = averseq_fe(duree,traceb,mat1,mat2,weight,numrows,numcols,numv1,numv2,refstart,indel_limit);
+            mataverage = averseq_fe(duree,traceb,mat1,mat2,weight,numrows,numcols,numv1,numv2,refstart,refend,indel_limit);
             /* normalise distance by length of alignment */
             /* *distance = *distance/(*refend-*refstart) ; NEED TESTING... */
             /* deal with indels using sliding windows
