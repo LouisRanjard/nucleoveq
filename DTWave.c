@@ -145,7 +145,7 @@ for (i=0;i<=numcols;i++) {
 double warpav(double *traceb, double *d, int numrows, int numcols, double *indelc, int fe, double *refend)
 {
     int i,j,k = 0 ; /* i rows ; j cols ; k traceback */
-    double cost[4] ; /* need to keep 4 cells for compatibility with warpav_ce */
+    double cost[4] ; /* need to keep 5 cells for compatibility with warpav_ce */
     double *dsf,dist ;
 
     dsf = (double *)mxMalloc((numrows+1) * (numcols+1) * sizeof(double));
@@ -186,8 +186,10 @@ double warpav(double *traceb, double *d, int numrows, int numcols, double *indel
    for (i=1;i<=numcols;i++) {
        for (j=1;j<=numrows;j++) {
            cost[1] = *(dsf+((numrows+1)*(i-1))+j) + *indelc;
+           /* cost[1] = *(dsf+((numrows+1)*(i-1))+j) + *indelc*(1-abs(1-*(mat1+(numrows*(j-1))+4))); INDELS facilitation -> reduce cost */
            cost[2] = *(dsf+((numrows+1)*(i-1))+(j-1)) + *(d+((numrows)*(i-1)+(j-1)));
            cost[3] = *(dsf+((numrows+1)*(i))+(j-1)) + *indelc;
+           /* cost[3] = *(dsf+((numrows+1)*(i))+(j-1)) + *indelc*(1-abs(1-*(mat1+(numrows*(j-1))+4))); INDELS facilitation -> reduce cost */
            k = mincost(cost,1,3);
            *(traceb+((numrows+1)*i)+j) = k;
            *(dsf+((numrows+1)*i)+j) = cost[k];
@@ -776,12 +778,12 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
             /* x = 0.3 ;
             weight = 0.5*(*distance*x*1000-5)/(1+abs(*distance*x*10000-5)) + 0.5 ; approximation */
             /* weight = *distance*660 ; if (weight>0.99) {weight=0.99;} linear approximation: y = 0.99*x/1.5e-3 */
-              if (*distance<.001) {weight=0.05;}
-              else if (*distance>0.002) {weight=0.95;}
-              else {weight=*distance*900-0.85;} /* approximation of logistic function by "cut" function */
+              if (*distance<.0005) {weight=0.05;}
+              else if (*distance>0.001) {weight=0.95;}
+              else {weight=*distance*1800-0.85;} /* approximation of logistic function by "cut" function */
             }
             indel_limit = weight*indel_weight ;
-            printf("distance=%f - weight=%.3f - indel_weight=%.3f - indel_limit=%.3f\n", *distance, weight, indel_weight, indel_limit);/*  */
+            /* printf("distance=%f - weight=%.3f - indel_weight=%.3f - indel_limit=%.3f\n", *distance, weight, indel_weight, indel_limit); */
             mataverage = averseq_fe(duree,traceb,mat1,mat2,weight,numrows,numcols,numv1,numv2,refstart,refend,indel_limit);
             /* normalise distance by length of alignment */
             /* *distance = *distance/(*refend-*refstart) ; NEED TESTING... */

@@ -16,9 +16,9 @@ function [weight_seq,rpositionr,rdist] = alignreadsvq(reads1,reads2,reffasta,opt
     % how long to consider before and after mapping position when MAPPING file is provided
     try width=options.width; catch width=+Inf ; end
     
-    % indels parameters
-    try indel_cost=options.indel_cost; catch indel_cost=1 ; end
-    try indel_weight=options.indel_weight; catch indel_weight=2 ; end
+    % indels parameters (from simulations, best is [1.3;0.09])
+    try indel_cost=options.indel_cost; catch indel_cost=1.3 ; end
+    try indel_weight=options.indel_weight; catch indel_weight=0.09 ; end
     
     % encode the reads
     if isfield(reads1,'Quality')
